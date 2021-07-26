@@ -138,9 +138,11 @@ ggplot(data = aphids.df3, aes(x, y, col = group, pch = group)) + geom_point() + 
   geom_abline(slope = spfit2$beta[, 1][2], intercept = spfit2$beta[, 1][1], col = 2) + geom_abline(slope = spfit2$beta[, 2][2], intercept = spfit2$beta[,2][1], col = 3) + 
   scale_color_manual("", values = c(2, 3), guide = F) + theme(text = element_text(size = 20), legend.position = "none")
 
+list(out.em$beta,spfit1$beta,spfit2$beta)
+
 z <- seq(min(c(spfit1$density.x,spfit2$density.x)),max(c(spfit1$density.x,spfit2$density.x)),length=200)
 dens <- data.frame(x=c(spfit1$density.x,spfit2$density.x,z),
-                   dens=c(spfit1$density.y,spfit2$density.y,dnorm(z, sd=sqrt((a$np.stdev)^2+a$bandwidth^2))),
+                   dens=c(spfit1$density.y,spfit2$density.y,dnorm(z, sd=sqrt((spfit1$np.stdev)^2+spfit1$bandwidth^2))),
                    Density=as.factor(c(rep("Symmetric Assumption",length(spfit1$density.x)),
                                    rep("No Symmetric Assumption",length(spfit2$density.x)),
                                    rep("Normal Density",length(z)))))
@@ -180,7 +182,7 @@ hospitals <- read.table("https://online.stat.psu.edu/stat462/sites/onlinecourses
 out <- lm(InfctRsk~Xray+Stay,data=hospitals)
 out.TI <- regtol.int2(out, new.x=data.frame(Xray=c(50,75),Stay=c(8,12)), alpha=0.10, P=0.90, side=2, new = TRUE)
 
-ggplottol.reg(out.TI, x=hospitals[c("Xray","Stay")], y=hospitals["InfctRsk"], side="two")
+ggplottol.reg(out.TI, x=hospitals[c("Xray","Stay")], y=hospitals["InfctRsk"], side="two", rect=TRUE)
 
 ##############################################################
 ##############################################################
