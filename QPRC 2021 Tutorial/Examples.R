@@ -255,6 +255,8 @@ Elliptical <- function(pts, x)
     out
 }
 
+### This will take a minute to run.
+
 tr.male <- npmvtol.region(x = as.matrix(ref.males[, -1]), alpha = 0.05, P = 0.95, 
     depth.fn = Elliptical, type = "semispace", adjust = "ceiling", semi.order = list(lower = NULL, 
         center = 2:3, upper = 1))
