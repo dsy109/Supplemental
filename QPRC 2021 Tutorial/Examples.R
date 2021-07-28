@@ -216,8 +216,7 @@ gam.out
 
 ggplottol.hist(gam.out, x = wells, side = "upper", x.lab = paste0("Vinyl Chloride Concentrations (", 
     "&#956;", "g/L)"))
-ggplottol.control(gam.out, x = wells, side = "upper", x.lab = paste0("Vinyl Chloride Concentrations (", 
-    "&#956;", "g/L)"))
+ggplottol.control(gam.out, x = wells, side = "upper", x.lab = "Index")
 
 ###########################################################
 ### Example #5: Hospital Infections Data
