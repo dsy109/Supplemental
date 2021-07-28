@@ -108,8 +108,6 @@ out <- mvnormalmixEM(DLBCLSample, k = 2, verb = TRUE)
 str(out)
 post <- as.factor(apply(out$posterior, 1, which.max))
 DLBCLSample2 <- data.frame(DLBCLSample, Component = post)
-ggscatmat(DLBCLSample2, columns = 1:3, color = "Component") + theme(text = element_text(size = 20), 
-    legend.position = "none")
 
 ### A few visualizations of the results.
 
@@ -212,6 +210,7 @@ wells <- c(5.1, 2.4, 0.4, 0.5, 2.5, 0.1, 6.8, 1.2, 0.5, 0.6, 5.3, 2.3, 1.8, 1.2,
     1.3, 1.1, 0.9, 3.2, 1, 0.9, 0.4, 0.6, 8, 0.4, 2.7, 0.2, 2, 0.2, 0.5, 0.8, 2, 
     2.9, 0.1, 4)
 gam.out <- gamtol.int(x = wells, alpha = 0.05, P = 0.95, side = 1, method = "EXACT")
+gam.out
 
 ### Histogram and control chart of the results.
 
@@ -236,6 +235,7 @@ hospitals <- read.table("https://online.stat.psu.edu/stat462/sites/onlinecourses
 out <- lm(InfctRsk ~ Xray + Stay, data = hospitals)
 out.TI <- regtol.int2(out, new.x = data.frame(Xray = c(50, 75), Stay = c(8, 12)), 
     alpha = 0.1, P = 0.9, side = 2, new = TRUE)
+out.TI
 
 ggplottol.reg(out.TI, x = hospitals[c("Xray", "Stay")], y = hospitals["InfctRsk"], 
     side = "two", rect = TRUE)
