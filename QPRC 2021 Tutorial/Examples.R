@@ -31,6 +31,7 @@ for (i in 0:4) print(round(mean(x[(i * 12 + 68):((i + 1) * 12 + 68), 3]), 0))
 ###########################################################
 
 library(mixtools)
+library(ggplot2)
 
 y <- read.table("http://astrostatistics.psu.edu/datasets/QSO_absorb.txt", nrows = 104, 
     skip = 1)[, 2]
