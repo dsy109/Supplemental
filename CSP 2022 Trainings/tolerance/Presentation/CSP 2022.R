@@ -81,6 +81,13 @@ set.seed(100)
 norm.ss(alpha = 0.05, P = 0.95, side = 2, spec = c(-3, 3),
         method = "DIR", hyper.par = list(mu.0 = 0, sig2.0 = 1))
 
+norm.ss(alpha = 0.05 , P = 0.90, delta = 0.10 , P.prime = 0.97 , 
+        side = 2 , m = 50 , method = "FW")
+
+norm.ss(x = rnorm(100 , mean = 0, sd = 3) , alpha = 0.05 , P = 0.90, delta = 0.10 ,
+        side = 2 , m = 50 , method = "YGZO" , spec = c(-2, 2), 
+        hyper.par = list(mu.0 = 0, sig2.0 = 1))
+
 ########################
 ### Example: norm.OC ###
 ########################
