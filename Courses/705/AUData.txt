@@ -1,0 +1,52 @@
+Country	GDP	Unemp
+"Algeria"	36.9	11.7
+"Angola"	80.5	20
+"Benin"	22.1	2.5
+"Botswana"	22.3	18.1
+"Burkina Faso"	24.4	6.3
+"Burundi"	14.4	7.7
+"Cameroon"	34	4.2
+"Cape Verde"	123.4	12.2
+"Central African Republic"	48.5	6
+"Chad"	46.6	5.89
+"Comoros"	31.2	4.3
+"Congo"	117.7	46.1
+"Djibouti"	90.7	8.1
+"Egypt"	101.2	6.9
+"Equatorial Guinea"	53.8	6.4
+"Eritrea"	20.1	19.1
+"Ethiopia"	33.5	19.6
+"Gabon"	66.5	9.5
+"Gambia"	65.6	2.4
+"Ghana"	70.5	4.5
+"Guinea"	18.66	6.1
+"Guinea Bissau"	28.1	2.6
+"Ivory Coast"	24.5	11.5
+"Kenya"	57.1	27.25
+"Lesotho"	46.3	2.4
+"Liberia"	28.8	17.7
+"Libya"	16.5	1.8
+"Madagascar"	41.9	5.9
+"Malawi"	54.7	7.9
+"Mauritania"	77.3	11.8
+"Mauritius"	64.9	6.4
+"Morocco"	63	10
+"Mozambique"	110.5	25.04
+"Namibia"	45.1	33.4
+"Niger"	29.7	0.4
+"Nigeria"	21.3	23.1
+"Republic of the Congo"	17	10.95
+"Rwanda"	40.2	15.1
+"Sao Tome and Principe"	87.5	13.5
+"Senegal"	37.1	15.7
+"Seychelles"	62	4.1
+"Sierra Leone"	60.3	4.5
+"South Africa"	55.8	27.6
+"Sudan"	53.5	12.7
+"Swaziland"	9.95	26.4
+"Tanzania"	37.4	10.3
+"Togo"	19.6	1.8
+"Tunisia"	69.2	15.3
+"Uganda"	38.6	2.1
+"Zambia"	55.6	7.79
+"Zimbabwe"	77.6	5.16

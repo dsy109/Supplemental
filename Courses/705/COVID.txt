@@ -1,0 +1,193 @@
+Country	Deaths
+North Korea	6
+Burundi	38
+China	14797
+Chad	193
+South Sudan	138
+Niger	311
+Tajikistan	125
+Benin	163
+Tanzania	841
+Nigeria	3147
+Congo (Kinshasa)	1391
+Sierra Leone	126
+Burkina Faso	387
+Central African Republic	113
+Bhutan	21
+Eritrea	103
+Cote d'Ivoire	815
+Togo	281
+Guinea	447
+Mali	739
+Nicaragua	244
+Ghana	1458
+Vanuatu	14
+Uzbekistan	1637
+Madagascar	1410
+Liberia	294
+Angola	1917
+Ethiopia	7571
+Congo (Brazzaville)	386
+Mozambique	2219
+Yemen	2152
+Cameroon	1933
+Haiti	838
+Papua New Guinea	663
+Uganda	3628
+Somalia	1361
+Guinea-Bissau	174
+Timor-Leste	135
+Laos	757
+Kenya	5673
+Kiribati	13
+Sudan	4960
+Rwanda	1466
+Tonga	12
+Senegal	1968
+Equatorial Guinea	183
+Gabon	306
+Pakistan	30529
+Malawi	2673
+Samoa	29
+Gambia	368
+Algeria	6878
+Micronesia	19
+Bangladesh	29313
+Syria	3157
+Cambodia	3056
+Comoros	161
+Djibouti	189
+Afghanistan	7758
+Venezuela	5778
+Mauritania	992
+Zambia	4016
+Solomon Islands	153
+Qatar	681
+United Arab Emirates	2339
+Egypt	24781
+Saudi Arabia	9269
+Singapore	1559
+Japan	35198
+Lesotho	704
+Palau	6
+Sao Tome and Principe	76
+Burma	19435
+New Zealand	1751
+Zimbabwe	5588
+India	527069
+Taiwan	9435
+Dominican Republic	4384
+Nepal	11988
+Morocco	16269
+Vietnam	43098
+Thailand	31858
+Kyrgyzstan	2991
+South Korea	25673
+Australia	12886
+Brunei	225
+Iceland	179
+Philippines	61036
+Maldives	307
+Indonesia	157226
+Kuwait	2562
+Iraq	25326
+Mongolia	2123
+El Salvador	4217
+Norway	3834
+Cabo Verde	410
+Cuba	8529
+Belarus	7118
+Sri Lanka	16621
+Mauritius	1019
+Saint Kitts and Nevis	46
+Bahrain	1513
+Oman	4628
+Libya	6434
+Dominica	68
+Cyprus	1149
+Azerbaijan	9773
+Finland	5350
+Fiji	875
+Kazakhstan	19030
+Saint Vincent and the Grenadines	115
+Guatemala	19230
+Jamaica	3221
+Honduras	10954
+Malaysia	36085
+West Bank and Gaza	5691
+Canada	43440
+Denmark	6841
+Botswana	2774
+Turkey	99678
+Eswatini	1419
+Albania	3571
+Israel	11501
+Netherlands	23175
+Jordan	14090
+Antigua and Barbuda	144
+Lebanon	10576
+Monaco	61
+Ireland	7743
+Namibia	4073
+Switzerland	13939
+Guyana	1275
+Iran	142944
+Seychelles	168
+Belize	680
+South Africa	101982
+Costa Rica	8780
+Germany	145698
+Kosovo	3184
+Luxembourg	1119
+Barbados	516
+Malta	797
+Serbia	16449
+Bolivia	22129
+Sweden	19528
+Panama	8434
+Estonia	2634
+Andorra	154
+Ecuador	35811
+Grenada	234
+Bahamas	823
+Saint Lucia	388
+Uruguay	7423
+Liechtenstein	86
+Austria	20485
+Suriname	1380
+France	154104
+Spain	111667
+Portugal	24722
+Tunisia	29153
+Russia	375360
+Mexico	328732
+Ukraine	116508
+Paraguay	19357
+United Kingdom	186798
+Colombia	141287
+Belgium	32364
+Argentina	129566
+Italy	174060
+Moldova	11662
+Trinidad and Tobago	4079
+Armenia	8637
+Greece	31722
+Poland	116773
+Latvia	5909
+Chile	59989
+US	1037021
+Brazil	681253
+Slovenia	6747
+Lithuania	9230
+Romania	66348
+San Marino	118
+Slovakia	20236
+Czechia	40647
+Croatia	16496
+Georgia	16877
+Montenegro	2759
+North Macedonia	9414
+Bosnia and Herzegovina	15942
+Hungary	46966
+Bulgaria	37488
+Peru	214956
