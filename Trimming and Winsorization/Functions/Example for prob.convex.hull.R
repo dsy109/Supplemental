@@ -1,0 +1,113 @@
+#####################
+###### Example ######
+#####################
+library(mixtools) # To calculate data depth 
+library(SimDesign) # To generate multivariate data
+library(mvtnorm) # To generate multivariate data
+library(tolerance) # To obtain nonparametric tolerance limits
+### Function to find convex hulls ###
+find_hull <- function(df) {c(chull(df[,1], df[,2]),chull(df[,1], df[,2])[1])}
+#####################################
+### Bivariate Normal Distribution ###
+#####################################
+set.seed(2022)
+### Joint Distribution ###
+mean.x <- mean.y <- 0
+sd.x <- sd.y <- 1
+cov.xy <- 0
+N <- 1000
+
+x <- rnorm(N , mean=mean.x , sd=sd.x)
+y <- rnorm(N , mean=mean.y , sd=sd.y)
+
+### Simulated Sample (Seudo Population) ###
+sim.sample <- matrix(c(x,y) , nrow = N , byrow = FALSE) 
+
+### Estimated Joint 
+mean.x.est <- mean(x)
+mean.y.est <- mean(y)
+sd.x.est <- sd(x)
+sd.y.est <- sd(y)
+cor.xy.est <- cor(x,y,method = "pearson")
+cov.xy.est <- cor.xy.est*sd.x.est*sd.y.est
+
+### Estimated Joint Distribution ###
+binorm.est <- function(x,y){
+  rho.est <- cor.xy.est
+  z.est <- (((x-mean.x.est)^2)/(sd.x.est^2))+(((y-mean.y.est)^2)/(sd.y.est^2))-(2*rho.est*(x-mean.x.est)*(y-mean.y.est))/(sd.x.est*sd.y.est)
+  (1/(2*pi*sd.x.est*sd.y.est*sqrt(1-rho.est^2)))*exp(-(z.est/(2*(1-rho.est^2))))
+}
+sample <- rmvnorm(N,mean=c(mean.x.est,mean.y.est),
+                  sigma = matrix(c((sd.x.est)^2,cov.xy.est,cov.xy.est,(sd.y.est)^2),
+                                 byrow = TRUE,nrow=2))
+
+### Data Depth Value ###
+sample.depth <- depth(sample,x=sample)
+sample.ordered <- sample[order(sample.depth , decreasing = FALSE),]
+sample.ordered.df <- data.frame(sample.ordered , 
+                                sample.depth[order(sample.depth , decreasing = FALSE)])
+names(sample.ordered.df) <- c("X","Y","Depth")
+################
+P <- 0.90
+alpha <- 0.05
+
+tol.pos <- min(which(sample.ordered.df$Depth >=
+                       nptol.int(sample.ordered.df$Depth ,
+                                      alpha=alpha,P=P,side=1,method="WILKS")$"1-sided.lower"))
+hull.tol <- find_hull(sample.ordered.df[tol.pos:N,])
+hull.tol.pts <- matrix(c(sample.ordered.df[tol.pos:N,]$X[hull.tol],
+                         sample.ordered.df[tol.pos:N,]$Y[hull.tol]),
+                       ncol = 2 , byrow = FALSE)
+
+## We should expect a probability close to P=0.90 ##
+prob.convex.hull(unique(hull.tol.pts) , binorm.est) # 0.9013453
+
+##########################################
+### Bivariate Exponential Distribution ###
+##########################################
+set.seed(2022)
+### Joint Distribution ###
+rate.x <- rate.y <- 1
+N <- 1000
+
+cor.xy.est <- 1
+while (cor.xy.est > 0.25 | cor.xy.est < -0.25) {
+  x <- rexp(N , rate=rate.x)
+  y <- rexp(N , rate=rate.y)
+  cor.xy.est <- cor(x,y,method = "pearson")
+}
+
+### Simulated Sample (Seudo Population) ###
+sim.sample <- matrix(c(x,y) , nrow = N , byrow = FALSE) 
+
+### Estimated Joint Distribution ###
+biexp.est <- function(x1 , x2){
+  alpha <- 4*cor.xy.est
+  exp(-x1-x2)*(1+alpha*(2*exp(-x1)-1)*(2*exp(-x2)-1))
+}
+
+library(lcmix)
+sample <- rmvexp(N,rate=c(1,1),
+                 corr = matrix(c(1,cor.xy.est,cor.xy.est,1),
+                               byrow = TRUE,nrow=2))
+
+### Data Depth Value ###
+sample.depth <- depth(sample,x=sample)
+sample.ordered <- sample[order(sample.depth , decreasing = FALSE),]
+sample.ordered.df <- data.frame(sample.ordered , 
+                                sample.depth[order(sample.depth , decreasing = FALSE)])
+names(sample.ordered.df) <- c("X","Y","Depth")
+################
+P <- 0.90
+alpha <- 0.05
+
+tol.pos <- min(which(sample.ordered.df$Depth >=
+                       nptol.int(sample.ordered.df$Depth ,
+                                 alpha=alpha,P=P,side=1,method="WILKS")$"1-sided.lower"))
+hull.tol <- find_hull(sample.ordered.df[tol.pos:N,])
+hull.tol.pts <- matrix(c(sample.ordered.df[tol.pos:N,]$X[hull.tol],
+                         sample.ordered.df[tol.pos:N,]$Y[hull.tol]),
+                       ncol = 2 , byrow = FALSE)
+### We should expect a probability close to P=0.90. ###
+prob.convex.hull(unique(hull.tol.pts) , biexp.est) # 0.8959064
+ 
