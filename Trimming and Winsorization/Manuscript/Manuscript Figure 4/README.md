@@ -1,4 +1,4 @@
 ### Instructions
 To generate simulations plots, please follow the steps below:
-* Go to <sub>ddd</sub>
-* gg
+1. Go to "Simulation Plots.R";
+2. On Line, please set the work directory at your discretion.
