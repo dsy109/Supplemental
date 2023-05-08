@@ -91,7 +91,7 @@ semicont.TI <- function(x,P,alpha,N){
   N.rnorm <- rnorm(N)
   ZILN_qp.star <- qgamma((P-pi.star)/(1-pi.star),shape=alpha.star, rate=beta.star)
   ZILN_qp.na <- sum(is.na(ZILN_qp.star))
-  ZILN.CI <- exp(quantile(log(pi.star)+x.tilde-(N.rnorm/U1)*(s.x.tilde/sqrt(n1))*(.5*s.x.tilde^2/U1.2), c(alpha/2,1-alpha/2), na.rm=T ))
+  ZILN.CI <- exp(quantile(log(1-pi.star)+x.tilde-(N.rnorm/U1)*(s.x.tilde/sqrt(n1))+(.5*s.x.tilde^2/U1.2), c(alpha/2,1-alpha/2), na.rm=T ))
   ZILN.TI <- exp(x.tilde + s.x.tilde*(quantile((N.rnorm+qnorm(eta.star)*sqrt(n1))/U1, 1-alpha, na.rm=T)/sqrt(n1)))
   
   delta <- rbinom(N,1,pi.star)
