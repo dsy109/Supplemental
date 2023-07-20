@@ -58,8 +58,31 @@ set.seed(1)
 x <- c(rnorm(50),rnorm(25,6),rnorm(25,12))[sample(1:100,size=100)]
 out.fid <- GMM.fid(x,k=3,M=10000)
 out.EM <- normalmixEM(x,k=3)
-sapply(1:3,function(i) apply(out.fid[[i]][-c(1:burn.in),],2,mean))
+out.fid2 <- sapply(1:3,function(i) apply(out.fid[[i]][-c(1:burn.in),],2,mean))
+out.fid2
 out.EM[2:4]
+
+ggplot(data.frame(i=5001:10000,out.fid[[1]][-c(1:burn.in),]), aes(x=i,y=X1)) + geom_line(col="#56B4E9") + labs(x="Post-Burn-In Iteration",y=expression(R[pi[1]])) +
+  ggtitle(expression(paste("Trace Plot of Generalized Fiducial Distribution for ", pi[1]))) +   theme(text = element_text(size = 25))
+ggplot(data.frame(i=5001:10000,out.fid[[1]][-c(1:burn.in),]), aes(x=i,y=X2)) + geom_line(col="#56B4E9") + labs(x="Post-Burn-In Iteration",y=expression(R[pi[2]])) +
+  ggtitle(expression(paste("Trace Plot of Generalized Fiducial Distribution for ", pi[2]))) +   theme(text = element_text(size = 25))
+ggplot(data.frame(i=5001:10000,out.fid[[1]][-c(1:burn.in),]), aes(x=i,y=X3)) + geom_line(col="#56B4E9") + labs(x="Post-Burn-In Iteration",y=expression(R[pi[3]])) +
+  ggtitle(expression(paste("Trace Plot of Generalized Fiducial Distribution for ", pi[3]))) +   theme(text = element_text(size = 25))
+
+ggplot(data.frame(i=5001:10000,out.fid[[2]][-c(1:burn.in),]), aes(x=i,y=X1)) + geom_line(col="#56E98B") + labs(x="Post-Burn-In Iteration",y=expression(R[mu[1]])) +
+  ggtitle(expression(paste("Trace Plot of Generalized Fiducial Distribution for ", mu[1]))) +   theme(text = element_text(size = 25))
+ggplot(data.frame(i=5001:10000,out.fid[[2]][-c(1:burn.in),]), aes(x=i,y=X2)) + geom_line(col="#56E98B") + labs(x="Post-Burn-In Iteration",y=expression(R[mu[2]])) +
+  ggtitle(expression(paste("Trace Plot of Generalized Fiducial Distribution for ", mu[2]))) +   theme(text = element_text(size = 25))
+ggplot(data.frame(i=5001:10000,out.fid[[2]][-c(1:burn.in),]), aes(x=i,y=X3)) + geom_line(col="#56E98B") + labs(x="Post-Burn-In Iteration",y=expression(R[mu[3]])) +
+  ggtitle(expression(paste("Trace Plot of Generalized Fiducial Distribution for ", mu[3]))) +   theme(text = element_text(size = 25))
+
+ggplot(data.frame(i=5001:10000,out.fid[[3]][-c(1:burn.in),]), aes(x=i,y=X1)) + geom_line(col="#E956B4") + labs(x="Post-Burn-In Iteration",y=expression(R[sigma[1]^2])) +
+  ggtitle(expression(paste("Trace Plot of Generalized Fiducial Distribution for ", sigma[1]^2))) +   theme(text = element_text(size = 25))
+ggplot(data.frame(i=5001:10000,out.fid[[3]][-c(1:burn.in),]), aes(x=i,y=X2)) + geom_line(col="#E956B4") + labs(x="Post-Burn-In Iteration",y=expression(R[sigma[2]^2])) +
+  ggtitle(expression(paste("Trace Plot of Generalized Fiducial Distribution for ", sigma[2]^2))) +   theme(text = element_text(size = 25))
+ggplot(data.frame(i=5001:10000,out.fid[[3]][-c(1:burn.in),]), aes(x=i,y=X3)) + geom_line(col="#E956B4") + labs(x="Post-Burn-In Iteration",y=expression(R[sigma[3]^2])) +
+  ggtitle(expression(paste("Trace Plot of Generalized Fiducial Distribution for ", sigma[3]^2))) +   theme(text = element_text(size = 25))
+
 
 #Hidalgo Stamp Data
 data(Stamp)
