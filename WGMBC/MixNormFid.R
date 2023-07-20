@@ -121,23 +121,3 @@ ggplot(Stamps, aes(x=Stamp)) + geom_histogram(aes(y=..density..),color="#FFFFFF"
 
 
 
-
-burn.in <- 50000
-ind <- t(sapply(1:M,function(i) order(all.R.mu[i,])))
-all.R.mu.red <- t(sapply((burn.in+1):M,function(i) all.R.mu[i,][ind[i,]]))
-all.R.sig2.red <- t(sapply((burn.in+1):M,function(i) all.R.sig2[i,][ind[i,]]))
-all.R.pi.red <- t(sapply((burn.in+1):M,function(i) all.R.pi[i,][ind[i,]]))
-
-apply(all.R.mu.red,2,mean)
-apply(all.R.sig2.red,2,mean)
-apply(all.R.pi.red,2,mean)
-
-ii <- 1
-plot(all.R.mu.red[,ii],type="l")
-plot(all.R.sig2.red[,ii],type="l")
-plot(all.R.pi.red[,ii],type="l")
-
-
-
-
-
