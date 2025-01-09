@@ -203,18 +203,6 @@ Wilson_k_factor = function(P.target, alpha.target,X, x0, h_sq=NULL){
   
 }
 
-# X = design_matrix(number_of_points=3,replication=1)
-# x0 = x.values(number_of_points=3)
-# Wilson_k_factor(0.75,0.95,X,x0)
-# 
-# X = design_matrix(number_of_points=3,replication=2)
-# x0 = x.values(number_of_points=3)
-# Wilson_k_factor(0.75,0.95,X,x0)
-# 
-# X = design_matrix(number_of_points=4,replication=1)
-# x0 = x.values(number_of_points=4)
-# Wilson_k_factor(0.75,0.95,X,x0)
-
 ###############################################################
 ###############################################################
 # Modified Wilson
@@ -420,15 +408,6 @@ C2_k_factor= function(P.target,alpha.target,X,x0,h_sq=NULL){
     m = mean(mmm)
   }
   
-  # mmm = rep(NA,1000)
-  # 
-  # for (i in 1:1000){
-  #   mmm[i]=M_value(X=X,alpha=alpha)  
-  #   print(i)
-  # } # end for (i in 1:1000)
-  # 
-  # m = mean(mmm)
-  
   
   for (j in 1:length(k.factor)){
     
@@ -460,122 +439,4 @@ C2_k_factor= function(P.target,alpha.target,X,x0,h_sq=NULL){
 }
 
 
-# MW_k_factor(P.target=0.75, 
-#             alpha.target=0.01,
-#             X=X, 
-#             x0=x0, 
-#             cm=NULL, h_sq=NULL)
 
-###############################################################
-# Function to find cm used in modified Wilson's procedure.
-
-# find_cm =function(gamma,X,min_cm,max_cm,cm_by){
-#   
-#   width =0.0001
-#   n = dim(X)[1]
-#   q = dim(X)[2]
-#   v = n-q
-#   k = sqrt((2*v-1)/(2*v))
-#   infinity = v+10*sqrt(v)
-#   
-#   area_under_curve = function(cm,width,X){
-#     
-#     width = width
-#     cm = cm
-#     w1 = seq(v*k^2,infinity,by=width)
-#     w2 = seq(v*(k-sqrt(cm/(2*v)))^2,v*k^2,by=width)
-#     
-#     G1 = function(w1) pchisq(q=w1*cm/(v*k^2),df=q)*dchisq(x=w1,df=v)
-#     G2 = function(w2) pchisq(q=cm-2*v*(sqrt(w2/v)-k)^2,df=q)*dchisq(x=w2,df=v)
-#     
-#     return(sum(G1(w1)*width) + sum(G2(w2)*width))
-#   } # end of the function area_under_curve
-#   
-#   Vectorized_area_under_curve = Vectorize(area_under_curve,　vectorize.args = "cm")
-#   
-#   min_cm = min_cm
-#   max_cm = max_cm
-#   
-#   # create a vector of cm candidate values
-#   cm.cand = seq(min_cm,max_cm,by=cm_by)
-#   # Find the answer to (2.24) from Limam's dissertation for each cm candidate
-#   area = Vectorized_area_under_curve(cm=cm.cand,width = width, X=X )
-#   # distance between gamma and (2.24)
-#   distance = abs(area - gamma)
-#   # plot the distances against cm candidate values
-#   plot(cm.cand,distance,type="l")
-#   # cm is the value that minimizes the distance.
-#   cm = cm.cand[which.min(distance)]
-#   
-#   return(cm)
-# }
-
-# Find cm using integrate and uniroot function
-# This is much more efficient!
-
-# find_cm2 =function(gamma,X){
-#   
-#   n = dim(X)[1]
-#   q = dim(X)[2]
-#   v = n-q
-#   k = sqrt((2*v-1)/(2*v))
-#  
-#   difference = function(c){
-#     cm=c
-#     func1 = function(w1) pchisq(q=w1*cm/(v*k^2),df=q)*dchisq(x=w1,df=v)
-#     func2 = function(w2) pchisq(q=cm-2*v*(sqrt(w2/v)-k)^2,df=q)*dchisq(x=w2,df=v)
-#     G1 = integrate(func1,lower = v*k^2, upper = Inf)$value
-#     G2 = integrate(func2,lower = v*(k-sqrt(cm/(2*v)))^2, upper = v*k^2)$value
-#   return(G1+G2-gamma)
-#   }
-#   
-#   differenceV = Vectorize(difference)
-#   
-#   curve(differenceV,xlim=c(0,100))
-#   abline(h=0,col="red")
-#   
-#   return(round(uniroot(differenceV,interval = c(0,50))$root,3))
-# 
-# }
-# 
-# find_cm2(gamma=0.90,X=X)
-# #[1] 5.018
-# find_cm2(gamma=0.95,X=X)
-# #[1] 6.432
-# find_cm2(gamma=0.99,X=X)
-# #[1] 9.653
-
-# D = data.frame(
-#   x = c(1.31,1.313,1.32,1.322,1.338,1.34,1.347,1.355,1.36,1.364,1.373,1.376,1.384,1.395,1.4),
-#   y = c(4360,4590,4520,4770,4760,5070,5230,5080,5550,5390,5670,5490,5810,6060,5940)
-# )
-# 
-# # Print the observed data table as latex format
-# mydata = cbind(rep(1,length(D$x)),D)
-# colnames(mydata) = c("intercept","X","Y")
-# #print(xtable(mydata,digits=c(0,0,3,0)),include.rownames=FALSE)
-# 
-# cbind(X0 = rep(1,dim(D)[1]),D)
-# 
-# X = cbind(rep(1,length(D$x)),D$x)
-# x.bar = 1.3531
-# N = dim(D)[1]
-# x.values = c(1.31,1.353,1.40)
-# Sx = sd(D$x)
-# 
-# z = c(0,0.5,1.0,1.474,1.5,1.604,2.0,2.5,3.0)
-# 
-# x1 = c(1, 0*Sx + x.bar); x2 = c(1, 0.5*Sx + x.bar) ; x3 = c(1, 1*Sx + x.bar)
-# x4 = c(1, 1.474*Sx + x.bar); x5 = c(1, 1.5*Sx + x.bar); x6 = c(1, 1.604*Sx + x.bar)
-# x7 = c(1, 2.0*Sx + x.bar); x8 = c(1, 2.5*Sx + x.bar); x9 = c(1, 3.0*Sx + x.bar)
-# 
-# x0 = rbind(x1,x2,x3,x4,x5,x6,x7,x8,x9)
-# 
-# MW_k_factor(P.target=0.9, alpha.target=0.01, X = X, x0 = x0, cm=NULL, h_sq=NULL)
-# # $cm [1] 9.653
-# 
-# MW_k_factor(P.target=0.9, alpha.target=0.05, X = X, x0 = x0, cm=NULL, h_sq=NULL)
-# # $cm [1] 6.432
-# 
-# xx = x0[c(1,5,9),]
-# MW_k_factor(P.target=0.9, alpha.target=0.05, X = xx, x0 = xx, cm=NULL, h_sq=NULL)
