@@ -1,0 +1,1895 @@
+---
+title: "Some Uses of Classic Dimension Reduction Methods for Circular Regression Modeling"
+output: html_notebook
+---
+
+```{r}
+# The extension of the simple circular regression model into multiple circular regression model
+library(circular)
+library(CircStats)
+lm.circular.cc <- function(y, x, order, level = 0.05, control.circular=list()) {
+control.circular=list()
+    if (length(x)==0) {
+        warning("No observations (at least after removing missing values)")
+        return(NULL)
+    }
+
+    if (is.circular(y)) {
+       datacircularp <- circularp(y)     
+    } else if (is.circular(x)) {
+              datacircularp <- circularp(x)     
+    } else {
+       datacircularp <- list(type="angles", units="radians", template="none", modulo="2pi", zero=0, rotation="counter")
+    }
+
+    dc <- control.circular
+    if (is.null(dc$type))
+       dc$type <- datacircularp$type
+    if (is.null(dc$units))
+       dc$units <- datacircularp$units
+    if (is.null(dc$template))
+       dc$template <- datacircularp$template
+    if (is.null(dc$modulo))
+       dc$modulo <- datacircularp$modulo
+    if (is.null(dc$zero))
+       dc$zero <- datacircularp$zero
+    if (is.null(dc$rotation))
+       dc$rotation <- datacircularp$rotation
+    
+    x <- conversion.circular(x, units="radians", zero=0, rotation="counter", modulo="2pi")
+    attr(x, "circularp") <- attr(x, "class") <- NULL
+    y <- conversion.circular(y, units="radians", zero=0, rotation="counter", modulo="2pi")
+    attr(y, "circularp") <- attr(y, "class") <- NULL
+    
+    circ.lm <- LmCircularccRad(y, x, order)
+    
+    circ.lm$call <- match.call()
+    circ.lm$fitted <- conversion.circular(circular(circ.lm$fitted), dc$units, dc$type, dc$template, dc$modulo, dc$zero, dc$rotation)
+    circ.lm$residuals <- conversion.circular(circular(circ.lm$residuals), dc$units, dc$type, dc$template, dc$modulo, dc$zero, dc$rotation)    
+    if (circ.lm$p.values[1] > level & circ.lm$p.values[2] > level) {
+      circ.lm$message <- paste("Higher order terms are not significant at the ", level, " level", sep = "")
+    } else {
+      circ.lm$message <- paste("Higher order terms are significant at the ", level, " level", sep = "")
+    }
+    class(circ.lm) <- "lm.circular.cc"
+    return(circ.lm)
+}
+
+
+LmCircularccRad <- function(y, x, order) {
+  
+  m<-ifelse(is.null(ncol(x)),1,ncol(x))
+  n <- length(x[,1])
+  order.matrix <- t(matrix(rep(c(1:order), n), ncol = n))
+  cos.x<-cos(as.numeric(x[,1]) * order.matrix)
+  sin.x<-sin(as.numeric(x[,1]) * order.matrix)
+  if (m>1) {
+    for (i in 2:m) {
+    
+      cos.x <- cbind(cos.x,cos(as.numeric(x[,i]) * order.matrix))
+      sin.x <- cbind(sin.x,sin(as.numeric(x[,i]) * order.matrix))
+    }
+  }
+    cy <- cos(y)
+    sy <- sin(y)
+    
+    cosy<-as.data.frame(cbind(cy,cos.x,sin.x))
+    siny<-as.data.frame(cbind(sy,cos.x,sin.x))
+    colnames(cosy)<-c("cy",2:ncol(cosy))
+    colnames(siny)<-c("sy",2:ncol(siny))
+    cos.lm <- lm(cy ~ .,data=cosy)
+    sin.lm <- lm(sy ~ .,data=siny)
+    #print(summary(cos.lm))
+    aic.cos<-AIC(cos.lm)
+    aic.sin<-AIC(sin.lm)
+    bic.cos<-BIC(cos.lm)
+    bic.sin<-BIC(sin.lm)
+    cos.fit <- cos.lm$fitted
+    sin.fit <- sin.lm$fitted
+    cosrsq<-summary(cos.lm)$adj.r.squared
+    sinrsq<-summary(sin.lm)$adj.r.squared
+    g1.sq <- t(cos.fit) %*% cos.fit
+    g2.sq <- t(sin.fit) %*% sin.fit
+    rho <- sqrt((g1.sq + g2.sq)/n)
+    y.fitted <- atan2(sin.fit, cos.fit)
+    Y1 <- cy
+    Y2 <- sy
+    ones <- matrix(1, n, 1)
+    X <- cbind(ones, cos.x, sin.x)
+    W <- cbind(cos((order + 1) * x), sin((order + 1) * x))
+    M <- X %*% solve(t(X) %*% X,tol=1e-500) %*% t(X)
+    I <- diag(n)
+    H <- t(W) %*% (I - M) %*% W
+    N <- W %*% solve(H,tol=1e-500) %*% t(W)
+    cc <- n - (2 * order + 1)
+    N1 <- t(Y1) %*% (I - M) %*% N %*% (I - M) %*% Y1
+    D1 <- t(Y1) %*% (I - M) %*% Y1
+    T1 <- cc * (N1/D1)
+    N2 <- t(Y2) %*% (I - M) %*% N %*% (I - M) %*% Y2
+    D2 <- t(Y2) %*% (I - M) %*% Y2
+    T2 <- cc * (N2/D2)
+    F1 <- T1 / 2
+    F2 <- T2 / 2
+    p1 <- 1 - pchisq(T1, 2)
+    p2 <- 1 - pchisq(T2, 2)
+    pvalues <- cbind(p1, p2)
+    circ.lm <- list()
+    circ.lm$rho <- rho
+    circ.lm$X <- X
+    circ.lm$y <- cbind(cy,sy)
+    circ.lm$fitted <- y.fitted %% (2 * pi)
+    circ.lm$x <- cbind(x, y)
+    circ.lm$residuals <- (y - y.fitted) %% (2 * pi)
+    circ.lm$coefficients <- cbind(cos.lm$coefficients, sin.lm$coefficients)
+    circ.lm$p.values <- pvalues
+    circ.lm$A.k <- mean(cos(circ.lm$residuals))
+    circ.lm$kappa <- A1inv(circ.lm$A.k)
+    circ.lm$R0T<-c(T1,T2)
+    circ.lm$R0F<-c(F1,F2)
+    circ.lm$rsq<-c(cosrsq,sinrsq)
+    circ.lm$essq<-c(N1,N2)
+    circ.lm$inf<-c(aic.cos,aic.sin,bic.cos,bic.sin)
+    circ.lm$cmodel<-cos.lm
+    circ.lm$smodel<-sin.lm
+    return(circ.lm)
+}
+#x <- as.matrix(circular(runif(50, 0, 2*pi)))
+```
+
+```{r}
+# simulation of the response variable from the circular independent variables
+simu<-function(x,m) {
+  as<-seq(0.05,0.5,0.05)
+  #as1<-sample(seq(0.05,0.5,0.05),ncol(x)*m,replace=T)
+  #as2<-sample(seq(0.05,0.5,0.05),ncol(x)*m,replace=T)
+  y1<-0
+  y2<-0
+  
+  for (i in 0:(m-1)) {
+    co<-sample(as,ncol(x),replace=T)
+    y1<-y1+rowSums(t(co*t(cos((i+1)*x))))+rowSums(t(co*t(sin((i+1)*x))))
+    co<-sample(as,ncol(x),replace=T)
+    y2<-y2+rowSums(t(co*t(sin((i+1)*x)))) +rowSums(t(co*t(sin((i+1)*x))))
+  }
+  y<-atan2(y1,y2)+rvonmises(n=nrow(x), mu=circular(0), kappa=5)
+  #y<-atan2(y1,y2)+rwrappednormal(n=nrow(x), mu = circular(0), sd = sqrt(-2*log(besselI(5,1)/besselI(5,0))), control.circular = list())
+  #y<-atan2(y1,y2)+rwrpcauchy(n=nrow(x), location=0, rho=besselI(5,1)/besselI(5,0))
+  #y<-atan2(y1,y2)+rcard(n=nrow(x),mu=0,r=0.5)
+  return(y)
+}
+
+# simulation of the response variable from the circular independent variables (with the same error terms as above)
+simu2<-function(x,m,xx) {
+  as<-seq(0.05,0.5,0.05)
+  y1<-0
+  y2<-0
+  for (i in 0:(m-1)) {
+    co<-sample(as,ncol(x),replace=T)
+    y1<-y1+rowSums(t(co*t(cos((i+1)*x))))+rowSums(t(co*t(sin((i+1)*x))))+rowSums(rnorm(n=nrow(xx),0,1)*xx)
+    co<-sample(as,ncol(x),replace=T)
+    y2<-y2+rowSums(t(co*t(sin((i+1)*x)))) +rowSums(t(co*t(sin((i+1)*x))))
+  }
+  y<-atan2(y1,y2)+rvonmises(n=nrow(x), mu=circular(0), kappa=5)
+  y<-atan2(y1,y2)+rwrappednormal(n=nrow(x), mu = circular(0), sd = sqrt(-2*log(besselI(5,1)/besselI(5,0))), control.circular = list())
+  y<-atan2(y1,y2)+rwrpcauchy(n=nrow(x), location=0, rho=besselI(5,1)/besselI(5,0))
+  return(y)
+}
+
+simu3<-function(x,m,t) {
+  as<-seq(0.05,0.5,0.05)
+  y1<-0
+  y2<-0
+  for (i in 0:(m-1)) {
+    co<-sample(as,ncol(x),replace=T)
+    y1<-y1+rowSums(t(co*t(cos((i+1)*x))))+rowSums(t(co*t(sin((i+1)*x))))
+    co<-sample(as,ncol(x),replace=T)
+    y2<-y2+rowSums(t(co*t(sin((i+1)*x)))) +rowSums(t(co*t(sin((i+1)*x))))
+  }
+  if (t==1) {y<-atan2(y1,y2)+rvonmises(n=nrow(x), mu=circular(0), kappa=5)} # Von-Mises error term
+  if (t==2) {y<-atan2(y1,y2)+rwrappednormal(n=nrow(x), mu = circular(0), sd = sqrt(-2*log(besselI(5,1)/besselI(5,0))), control.circular = list())} # Wrapped Normal error term
+  if (t==3) {y<-atan2(y1,y2)+rwrpcauchy(n=nrow(x), location=0, rho=besselI(5,1)/besselI(5,0))} # Wrapped Cauchy error term
+  return(y)
+}
+simu4<-function(x,m,xx,t) {
+  as<-seq(0.05,0.5,0.05)
+  y1<-0
+  y2<-0
+  co<-sample(as,ncol(x),replace=T)
+  for (i in 0:(m-1)) {
+    y1<-y1+rowSums(t(co*t(cos((i+1)*x))))+rowSums(t(co*t(sin((i+1)*x))))+rowSums(rnorm(n=nrow(xx),0,1)*xx)
+    y2<-y2+rowSums(t(co*t(sin((i+1)*x)))) +rowSums(t(co*t(sin((i+1)*x))))
+  }
+  if (t==1) {y<-atan2(y1,y2)+rvonmises(n=nrow(x), mu=circular(0), kappa=5)}
+  if (t==2) {y<-atan2(y1,y2)+rwrappednormal(n=nrow(x), mu = circular(0), sd = sqrt(-2*log(besselI(5,1)/besselI(5,0))), control.circular = list())}
+  if (t==3) {y<-atan2(y1,y2)+rwrpcauchy(n=nrow(x), location=0, rho=besselI(5,1)/besselI(5,0))}
+  
+  return(y)
+}
+```
+
+#AIC and BIC
+```{r,warning=F}
+set.seed(123)
+library(ggplot2)
+library(CircSpaceTime)
+B<-50
+n<-400
+RF<-rep(NA,B)
+#lm.circular.cc(y, x, order=1)
+title<-c('ESS for Degree 1 Model','ESS for Degree 2 Model','ESS for Degree 3 Model','ESS for Degree 4 Model','ESS for Degree 5 Model')
+title1<-c('degree 1 by AIC','degree 2 by AIC','degree 3 by AIC','degree 4 by AIC','degree 5 by AIC')
+title2<-c('degree 1 by BIC','degree 2 by BIC','degree 3 by BIC','degree 4 by BIC','degree 5 by BIC')
+for (i in 1:5) {
+  
+RN<-matrix(nrow=5,ncol=2)
+info<-matrix(nrow=5,ncol=4)
+#x <- circular(cbind(runif(400, 0, 2*pi)))
+#x <- circular(cbind(runif(400, 0, 2*pi),runif(400, 0, 2*pi)))
+#x<-april$apr2.2010[april$apr2.2010$hour=="00:00",3:4]
+#y<-april$apr2.2010[april$apr2.2010$hour=="00:00",6]
+x <- circular(cbind(runif(1000, 0, 2*pi),runif(1000, 0, 2*pi),runif(1000, 0, 2*pi)))
+# Fit a circular-circular regression model.
+y<-simu(x,i)
+  
+R0T<-matrix(nrow=5,ncol=3)
+        R0F<-matrix(nrow=5,ncol=3)
+        R0N<-matrix(nrow=5,ncol=3)
+for (s in 1:5)  {
+          circ.lm <- lm.circular.cc(y, x, order=s)
+          #circ.lm <- lm.circular.cc(y, x, order=s)
+          RN[s,]<-circ.lm$essq
+          info[s,]<-circ.lm$inf
+          circ.lm$fitted[circ.lm$fitted>pi] <- circ.lm$fitted[circ.lm$fitted>pi] - 2*pi
+          
+          
+}
+
+print(info)
+#plot(RN[,1],type="o",ylim=c(0,70),xlab="degree",ylab="Error Sum of Squares",main=title[i])
+#lines(RN[,2],type="o")
+#plot(info[,1],type="o",ylim=c(400,900),xlab="degree",ylab="AIC",main=title1[i])
+#lines(info[,2],type="o")
+#plot(info[,3],type="o",ylim=c(400,900),xlab="degree",ylab="BIC",main=title2[i])
+#lines(info[,4],type="o")
+RN<-as.data.frame(RN)
+RN<-reshape2::melt(RN)
+RN<-cbind(RN,rep(1:5,2))
+colnames(RN)<-c("Model","value","degree")
+RN$Model<-c(rep("cosine",5),rep("sine",5))
+
+AIC<-as.data.frame(info[,1:2])
+AIC<-reshape2::melt(AIC)
+AIC<-cbind(AIC,rep(1:5,2))
+colnames(AIC)<-c("Model","value","degree")
+AIC$Model<-c(rep("cosine",5),rep("sine",5))
+
+BIC<-as.data.frame(info[,3:4])
+BIC<-reshape2::melt(BIC)
+BIC<-cbind(BIC,rep(1:5,2))
+colnames(BIC)<-c("Model","value","degree")
+BIC$Model<-c(rep("cosine",5),rep("sine",5))
+
+print(ggplot(data=RN,aes(x=degree, y=value,colour=Model)) + geom_point()+geom_line()+ylim(0,150)+labs(title=title[i],x="Degree", y = "Error Sum of Squares"))
+print(ggplot(data=AIC,aes(x=degree, y=value,colour=Model)) + geom_point()+geom_line()+ylim(1000,2500)+labs(title=title1[i],x="Degree", y = "Error Sum of Squares"))
+print(ggplot(data=BIC,aes(x=degree, y=value,colour=Model)) + geom_point()+geom_line()+ylim(1000,2500)+labs(title=title2[i],x="Degree", y = "Error Sum of Squares"))
+}
+#table(RF)
+```
+
+```{r}
+set.seed(123)
+library(pracma)
+library(ggplot2)
+title<-c("apr2calm","apr3calm","apr5calm","apr5transition","apr5storm","apr6calm","apr6transition","apr6storm")
+RNlist<-list()
+t<-0
+for (B in 1:4) {  
+ 
+  aub<-split(april[[B]],april[[B]]$state)
+  #for (BB in 1:24) {
+    #aubb<-aub[[BB]][order(aub[[BB]]$state),]
+    #aub1<-split(aubb,aubb$state)
+  k4<-3
+  if (B<=2) {k4<-1}
+    for (BBB in 1:k4) {
+      t<-t+1
+x<-deg2rad(aub[[BBB]][,3])
+x2<-deg2rad(aub[[BBB]][,4])
+#x3<-(x+x2)/2
+x<-circular(cbind(x,x2))
+y<-deg2rad(circular(aub[[BBB]][,6]))
+RN<-matrix(nrow=5,ncol=2)
+for (s in 1:5)  {
+  order<-s
+          m<-ifelse(is.null(ncol(x)),1,ncol(x))
+  n <- length(x[,1])
+  order.matrix <- t(matrix(rep(c(1:order), n), ncol = n))
+  cos.x<-cos(as.numeric(x[,1]) * order.matrix)
+  sin.x<-sin(as.numeric(x[,1]) * order.matrix)
+  if (m>1) {
+    for (ij in 2:m) {
+    
+      cos.x <- cbind(cos.x,cos(as.numeric(x[,ij]) * order.matrix))
+      sin.x <- cbind(sin.x,sin(as.numeric(x[,ij]) * order.matrix))
+    }
+  }
+    cy <- cos(y)
+    sy <- sin(y)
+    
+    cosy<-as.data.frame(cbind(cy,cos.x,sin.x))
+    siny<-as.data.frame(cbind(sy,cos.x,sin.x))
+    cos.lm <- lm(cy ~ .,data=cosy)
+    sin.lm <- lm(sy ~ .,data=siny)
+    #print(summary(cos.lm))
+    aic.cos<-AIC(cos.lm)
+    aic.sin<-AIC(sin.lm)
+    bic.cos<-BIC(cos.lm)
+    bic.sin<-BIC(sin.lm)
+    cos.fit <- cos.lm$fitted
+    sin.fit <- sin.lm$fitted
+    cosrsq<-summary(cos.lm)$adj.r.squared
+    sinrsq<-summary(sin.lm)$adj.r.squared
+    g1.sq <- t(cos.fit) %*% cos.fit
+    g2.sq <- t(sin.fit) %*% sin.fit
+    rho <- sqrt((g1.sq + g2.sq)/n)
+    y.fitted <- atan2(sin.fit, cos.fit)
+    Y1 <- cy
+    Y2 <- sy
+    ones <- matrix(1, n, 1)
+    X <- cbind(ones, cos.x, sin.x)
+    W <- cbind(cos((order + 1) * x), sin((order + 1) * x))
+    M <- X %*% solve(t(X) %*% X,tol=1e-800) %*% t(X)
+    I <- diag(n)
+    H <- t(W) %*% (I - M) %*% W
+    N <- W %*% solve(H,tol=1e-800) %*% t(W)
+    cc <- n - (2 * order + 1)
+    N1 <- t(Y1) %*% (I - M) %*% N %*% (I - M) %*% Y1
+    D1 <- t(Y1) %*% (I - M) %*% Y1
+    T1 <- cc * (N1/D1)
+    N2 <- t(Y2) %*% (I - M) %*% N %*% (I - M) %*% Y2
+    RN[s,]<-c(N1,N2) 
+    info[s,]<-c(aic.cos,aic.sin,bic.cos,bic.sin)
+    #print(c(cosrsq,sinrsq))
+    
+}
+drop1<-diff(RN[,1])
+drop2<-diff(RN[,2])
+#print(drop1)
+#print(drop2)
+print(RN)
+RN<-as.data.frame(RN)
+RN<-reshape2::melt(RN)
+RN<-cbind(RN,rep(1:5,2))
+colnames(RN)<-c("variable","value","degree")
+RN$variable<-c(rep("cos model",5),rep("sin model",5))
+RNlist[[t]]<-RN
+    }
+}
+RN
+```
+
+```{r}
+miny<-min(RN$value)
+for (i in 1:8) {
+#print(ggplot(data=RNlist[[i]],aes(x=degree, y=value,colour=variable)) + geom_point()+geom_line()+ylim(-500,5000)+labs(title=title[i],x="degree", y = "Error Sum of Squares"))
+  print(diff(RNlist[[i]]$value[1:5]))
+  print(diff(RNlist[[i]]$value[6:10]))
+}
+#plot(RN[,1],type="o",ylim=c(0,40),xlab="degree",ylab="Error Sum of Squares",main=title[i])
+#lines(RN[,2],type="o")
+#plot(info[,1],type="o",ylim=c(3100,3400),xlab="degree",ylab="AIC",main='degree by AIC')
+#lines(info[,2],type="o")
+#plot(info[,3],type="o",ylim=c(3100,3400),xlab="degree",ylab="BIC",main='degree by BIC')
+#lines(info[,4],type="o")
+    
+  
+
+```
+#PCA and PLS for real data
+```{r,warning=F}
+set.seed(123)
+library(CircSpaceTime)
+library(glmnet)
+data(april)
+library(pls)
+library(pracma)
+
+rpca<-rep(NA,5000)
+rpls<-rep(NA,5000)
+rraw<-rep(NA,5000)
+rlasso<-rep(NA,5000)
+#for (B in 1:5000) {
+
+order1<-c(1,1,2,2,1,1,1,1)
+kk<-0
+for (B in 1:4) {  
+  
+aub<-split(april[[B]],april[[B]]$state)
+k4<-3
+if (B<=2) {k4<-1}
+for (BBB in 1:k4) {
+  kk<-kk+1
+  order<-order1[kk]
+  x<-circular(aub[[BBB]][,3:4])
+y<-circular(aub[[BBB]][,6])
+#april_dummy<-dummy_cols(april[[ap]], select_columns = "state")
+#xx<-circular(april_dummy[,8:10])
+#xxx<-xx^2
+#xxxx<-xx^3
+
+#y<-simu.mix(xx1,2,i)
+x1<-deg2rad(x)
+y3<-deg2rad(y)
+
+
+#x1 <- circular(cbind(data1,data2,data3,runif(400, 0, pi),(data1+data3)/2))
+#y3 <- simu(x1,5)
+#x1 <- circular(cbind(runif(400, 0, 2*pi),runif(400, 0, 2*pi)))
+#y3 <- atan2(0.15*cos(x[,1]) + 0.25*sin(x[,1])+0.35*cos(x[,2])+ 0.2*sin(x[,2]), 0.35*sin(x[,1])+0.4*sin(x[,2])) + rvonmises(n=400, mu=circular(0), kappa=5)
+sample.size <- floor(0.3 * nrow(x1))
+train.index <- sample(seq_len(nrow(x1)), size = sample.size)
+x.train <- x1[train.index, ]
+x.test <- x1[- train.index, ]
+y.train <- y3[train.index]
+y.test <- y3[- train.index]
+
+
+m<-ifelse(is.null(ncol(x.train)),1,ncol(x.train))
+  n1 <- length(x.train[,1])
+  order.matrix1 <- t(matrix(rep(c(1:order), n1), ncol = n1))
+  n2 <- length(x.test[,1])
+  order.matrix2 <- t(matrix(rep(c(1:order), n2), ncol = n2))
+  cos.x.train<-cos(x.train[,1] * order.matrix1)
+  sin.x.train<-sin(x.train[,1] * order.matrix1)
+  cos.x.test<-cos(x.test[,1] * order.matrix2)
+  sin.x.test<-sin(x.test[,1] * order.matrix2)
+for (i in 2:m) {
+    
+    cos.x.train <- cbind(cos.x.train,cos(x.train[,i] * order.matrix1))
+    sin.x.train <- cbind(sin.x.train,sin(x.train[,i] * order.matrix1))
+    cos.x.test <- cbind(cos.x.test,cos(x.test[,i] * order.matrix2))
+    sin.x.test <- cbind(sin.x.test,sin(x.test[,i] * order.matrix2))
+  }
+    cy.train <- cos(y.train)
+    sy.train <- sin(y.train)
+    cy.test <- cos(y.test)
+    sy.test <- sin(y.test)
+    #cosy.train<-as.data.frame(cbind(cy.train,cos.x.train,sin.x.train))
+    #siny.train<-as.data.frame(cbind(sy.train,cos.x.train,sin.x.train))
+    #cosy.test<-as.data.frame(cbind(cy.test,cos.x.test,sin.x.test))
+    #siny.test<-as.data.frame(cbind(sy.test,cos.x.test,sin.x.test))
+    cosy.train<-as.data.frame(cy.train)
+    siny.train<-as.data.frame(sy.train)
+    cosy.test<-as.data.frame(cy.test)
+    siny.test<-as.data.frame(sy.test)
+    for (j in 1:ncol(cos.x.test)) {
+      cosy.train<-as.data.frame(cbind(cosy.train,cos.x.train[,j],sin.x.train[,j]))
+      siny.train<-as.data.frame(cbind(siny.train,cos.x.train[,j],sin.x.train[,j]))
+      cosy.test<-as.data.frame(cbind(cosy.test,cos.x.test[,j],sin.x.test[,j]))
+      siny.test<-as.data.frame(cbind(siny.test,cos.x.test[,j],sin.x.test[,j]))
+    }
+    colnames(cosy.train)<-1:(2*ncol(cos.x.test)+1)
+    colnames(siny.train)<-1:(2*ncol(cos.x.test)+1)
+    colnames(cosy.test)<-1:(2*ncol(cos.x.test)+1)
+    colnames(siny.test)<-1:(2*ncol(cos.x.test)+1)
+  #cossinx<-cbind(cos.x,sin.x)
+  pr<-prcomp(cosy.train[,-1])
+  #summary(pr)
+  #print(pr$loadings)
+  #n<-as.numeric(which(cumsum(attr(scores(pr),which="explvar"))>=80)[1])
+  #df1<-abs(pr$loadings[,1:n])
+  #print(rowsum(df1, as.integer(gl(nrow(df1), 2, nrow(df1)))))
+  #print(n)
+  #pr2<-prcomp(cossinx)
+  #eig<-pr2$sdev^2
+  #(var<-eig*100/sum(eig))
+  #(cumvar<-cumsum(var))
+  #model1 <- pcr(cy.train~., data=cosy.train,scale=TRUE, validation="CV")
+  #model2 <- pcr(sy.train~., data=siny.train,scale=TRUE, validation="CV")
+  #print(summary(model1))
+  #print(summary(model2))
+  #print(model1$loadings)
+  spr<-summary(pr)
+  l<-min(which(spr$importance[3,]>=0.8))
+  if (l==1) {l<-2}
+  xpca.train<-as.data.frame(pr$x[,1:l])
+  #colnames(x.pca)<-1:ncol(x.pca)
+  #print(spr$rotation)
+  
+  #
+  #y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  xpca.test1 <- predict(pr, newdata=cosy.test[,-1])
+  xpca.test<-xpca.test1[,1:l]
+  cy.pca<-as.data.frame(cbind(cy.train,xpca.train))
+  sy.pca<-as.data.frame(cbind(sy.train,xpca.train))
+  cmodel <- lm(cy.train~.,data=cy.pca)
+  smodel <- lm(sy.train~.,data=sy.pca)
+  cosy_pred <- predict(cmodel, newdata=as.data.frame(xpca.test))
+  siny_pred <- predict(smodel, newdata=as.data.frame(xpca.test))
+  y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.pca <- abs(as.numeric(mean(abs(y.test - y.pred))))
+  y.pred<-y.pred %% (2 * pi)
+  resi.pca<-mean(cos((y.test - y.pred) %% (2 * pi)))
+   model1 <- plsr(`1`~., data=cosy.train,scale=TRUE, validation="CV")
+  model2 <- plsr(`1`~., data=siny.train,scale=TRUE, validation="CV")
+   comp<-cumsum(explvar(model1))
+   l2<-min(which(comp>=0.8))
+  
+  #summary(model1)
+  #summary(model2)
+  cosy_pred <- predict(model1,cosy.test[,-1],ncomp=l2)
+  siny_pred <- predict(model2,siny.test[,-1],ncomp=l2)
+  y.pred<-atan2(cosy_pred,siny_pred)
+  #resi <- abs(as.numeric(mean(abs(y.test - y.pred))))
+  y.pred<-y.pred %% (2 * pi)
+  resi<-mean(cos((y.test - y.pred) %% (2 * pi)))
+  circ.lm <- lm.circular.cc(y.train, x.train, order=order)
+  cmodel<-circ.lm$cmodel
+  smodel<-circ.lm$smodel
+  cosy_pred <- predict(cmodel, newdata=as.data.frame(cosy.test[,-1]))
+  siny_pred <- predict(smodel, newdata=as.data.frame(siny.test[,-1]))
+  y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.lm <- abs(as.numeric(mean(abs(y.test - y.pred))))
+  y.pred<-y.pred %% (2 * pi)
+  resi.lm<-mean(cos((y.test - y.pred) %% (2 * pi)))
+  
+  #cv_model <- cv.glmnet(as.matrix(cosy.train[-1]), as.matrix(cosy.train[1]), alpha = 1)
+
+#best_lambda <- cv_model$lambda.min
+#best_model <- glmnet(as.matrix(cosy.train[-1]), as.matrix(cosy.train[1]), alpha = 1, lambda = best_lambda)
+#cosy_pred<-predict(best_model, s = best_lambda, newx = as.matrix(cosy.test[-1]))
+#cv_model <- cv.glmnet(as.matrix(siny.train[-1]), as.matrix(siny.train[1]), alpha = 1)
+
+#best_lambda <- cv_model$lambda.min
+#best_model <- glmnet(as.matrix(siny.train[-1]), as.matrix(siny.train[1]), alpha = 1, lambda = best_lambda)
+#siny_pred<-predict(best_model, s = best_lambda, newx = as.matrix(siny.test[-1]))
+#y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.lasso[order] <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi)))
+  print(as.numeric(c(resi.lm,resi.pca,resi)))
+
+ # if (which.min(c(resi.lm,resi.pca,resi))==1) {k1<-k1+1}
+#if (which.min(c(resi.lm,resi.pca,resi))==2) {k2<-k2+1}
+#if (which.min(c(resi.lm,resi.pca,resi))==3) {k3<-k3+1}
+  #}
+}
+#print(c(k1,k2,k3))
+
+#if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi),mean(resi.lasso)))==4) {k4<-k4+1}
+#rpca[B]<-mean(resi.pca)
+#rpls[B]<-mean(resi)
+#rraw[B]<-mean(resi.lm)
+#rlasso[B]<-mean(resi.lasso)
+#print(mean(resi.lasso[1]))
+
+
+
+}
+```
+
+
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+# Dimension reduction on dataset with medium multicollinearity
+```{r,warning=F}
+set.seed(123)
+library(CircSpaceTime)
+library(glmnet)
+data(april)
+library(pls)
+library(pracma)
+k1<-0
+k2<-0
+k3<-0
+k4<-0
+rpca<-rep(NA,5000)
+rpls<-rep(NA,5000)
+rraw<-rep(NA,5000)
+rlasso<-rep(NA,5000)
+for (B in 1:5000) {
+data1 <- circular(runif(400, 0, pi))
+data2 <- data1 + pi+rvonmises(400,0,5)
+data2 <- 0.5*data1 + pi+rvonmises(400,0,2)
+data3 <- circular(runif(400, 0, 2*pi))
+data4<-(data1+data3)/2
+#data4<-data3 + pi+rvonmises(400,0,5)
+circ.cor(data1, data2, test=TRUE)
+#x<-deg2rad(april$apr2.2010[april$apr2.2010$hour=="00:00",3])
+#x2<-deg2rad(april$apr2.2010[april$apr2.2010$hour=="00:00",4])
+#x3<-(x+x2)/2
+#x1<-circular(cbind(x,x2))
+#y3<-circular(deg2rad(april$apr2.2010[april$apr2.2010$hour=="00:00",6]))
+x1 <- circular(cbind(data1,data2,data3))
+y3 <- simu(x1,5)
+#x1 <- circular(cbind(runif(400, 0, 2*pi),runif(400, 0, 2*pi)))
+#y3 <- atan2(0.15*cos(x[,1]) + 0.25*sin(x[,1])+0.35*cos(x[,2])+ 0.2*sin(x[,2]), 0.35*sin(x[,1])+0.4*sin(x[,2])) + rvonmises(n=400, mu=circular(0), kappa=5)
+sample.size <- floor(0.3 * nrow(x1))
+train.index <- sample(seq_len(nrow(x1)), size = sample.size)
+x.train <- x1[train.index, ]
+x.test <- x1[- train.index, ]
+y.train <- y3[train.index]
+y.test <- y3[- train.index]
+resi.pca<-rep(NA,5)
+resi.lm<-rep(NA,5)
+resi<-rep(NA,5)
+resi.lasso<-rep(NA,5)
+for (order in 1:5) {
+  y3 <- simu(x1,order)
+m<-ifelse(is.null(ncol(x.train)),1,ncol(x.train))
+  n1 <- length(x.train[,1])
+  order.matrix1 <- t(matrix(rep(c(1:order), n1), ncol = n1))
+  n2 <- length(x.test[,1])
+  order.matrix2 <- t(matrix(rep(c(1:order), n2), ncol = n2))
+  cos.x.train<-cos(x.train[,1] * order.matrix1)
+  sin.x.train<-sin(x.train[,1] * order.matrix1)
+  cos.x.test<-cos(x.test[,1] * order.matrix2)
+  sin.x.test<-sin(x.test[,1] * order.matrix2)
+for (i in 2:m) {
+    
+    cos.x.train <- cbind(cos.x.train,cos(x.train[,i] * order.matrix1))
+    sin.x.train <- cbind(sin.x.train,sin(x.train[,i] * order.matrix1))
+    cos.x.test <- cbind(cos.x.test,cos(x.test[,i] * order.matrix2))
+    sin.x.test <- cbind(sin.x.test,sin(x.test[,i] * order.matrix2))
+  }
+    cy.train <- cos(y.train)
+    sy.train <- sin(y.train)
+    cy.test <- cos(y.test)
+    sy.test <- sin(y.test)
+    #cosy.train<-as.data.frame(cbind(cy.train,cos.x.train,sin.x.train))
+    #siny.train<-as.data.frame(cbind(sy.train,cos.x.train,sin.x.train))
+    #cosy.test<-as.data.frame(cbind(cy.test,cos.x.test,sin.x.test))
+    #siny.test<-as.data.frame(cbind(sy.test,cos.x.test,sin.x.test))
+    cosy.train<-as.data.frame(cy.train)
+    siny.train<-as.data.frame(sy.train)
+    cosy.test<-as.data.frame(cy.test)
+    siny.test<-as.data.frame(sy.test)
+    for (j in 1:ncol(cos.x.test)) {
+      cosy.train<-as.data.frame(cbind(cosy.train,cos.x.train[,j],sin.x.train[,j]))
+      siny.train<-as.data.frame(cbind(siny.train,cos.x.train[,j],sin.x.train[,j]))
+      cosy.test<-as.data.frame(cbind(cosy.test,cos.x.test[,j],sin.x.test[,j]))
+      siny.test<-as.data.frame(cbind(siny.test,cos.x.test[,j],sin.x.test[,j]))
+    }
+    colnames(cosy.train)<-1:(2*ncol(cos.x.test)+1)
+    colnames(siny.train)<-1:(2*ncol(cos.x.test)+1)
+    colnames(cosy.test)<-1:(2*ncol(cos.x.test)+1)
+    colnames(siny.test)<-1:(2*ncol(cos.x.test)+1)
+  #cossinx<-cbind(cos.x,sin.x)
+  pr<-prcomp(cosy.train[,-1])
+  #summary(pr)
+  #print(pr$loadings)
+  #n<-as.numeric(which(cumsum(attr(scores(pr),which="explvar"))>=80)[1])
+  #df1<-abs(pr$loadings[,1:n])
+  #print(rowsum(df1, as.integer(gl(nrow(df1), 2, nrow(df1)))))
+  #print(n)
+  #pr2<-prcomp(cossinx)
+  #eig<-pr2$sdev^2
+  #(var<-eig*100/sum(eig))
+  #(cumvar<-cumsum(var))
+  #model1 <- pcr(cy.train~., data=cosy.train,scale=TRUE, validation="CV")
+  #model2 <- pcr(sy.train~., data=siny.train,scale=TRUE, validation="CV")
+  #print(summary(model1))
+  #print(summary(model2))
+  #print(model1$loadings)
+  spr<-summary(pr)
+  l<-min(which(spr$importance[3,]>=0.8))
+  #if (l==1) {l<-2}
+  xpca.train<-as.data.frame(pr$x[,1:l])
+  #colnames(x.pca)<-1:ncol(x.pca)
+  #print(spr$rotation)
+  
+  #
+  #y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  xpca.test1 <- predict(pr, newdata=cosy.test[,-1])
+  xpca.test<-xpca.test1[,1:l]
+  cy.pca<-as.data.frame(cbind(cy.train,xpca.train))
+  sy.pca<-as.data.frame(cbind(sy.train,xpca.train))
+  cmodel <- lm(cy.train~.,data=cy.pca)
+  smodel <- lm(sy.train~.,data=sy.pca)
+  cosy_pred <- predict(cmodel, newdata=as.data.frame(xpca.test))
+  siny_pred <- predict(smodel, newdata=as.data.frame(xpca.test))
+  y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.pca[order] <- mean(as.numeric(abs(y.test - y.pred) %% (2 * pi)))
+  #resi.pca[order] <- mean(abs(y.test - y.pred)**2 )
+  resi.pca[order] <- abs(as.numeric(mean(abs(y.test - y.pred))))
+  y.pred<-y.pred %% (2 * pi)
+  resi.pca[order]<-mean(cos((y.test - y.pred) %% (2 * pi)))
+   model1 <- plsr(`1`~., data=cosy.train,scale=TRUE, validation="CV")
+  model2 <- plsr(`1`~., data=siny.train,scale=TRUE, validation="CV")
+   comp<-cumsum(explvar(model1))
+   l2<-min(which(comp>=0.8))
+  
+  #summary(model1)
+  #summary(model2)
+  cosy_pred <- predict(model1,cosy.test[,-1],ncomp=l2)
+  siny_pred <- predict(model2,siny.test[,-1],ncomp=l2)
+  y.pred<-atan2(cosy_pred,siny_pred)
+  #resi[order] <- mean(as.numeric(abs(y.test - y.pred) %% (2 * pi)))
+  #resi[order] <- mean(abs(y.test - y.pred)**2)
+  #resi[order] <- abs(as.numeric(mean(abs(y.test - y.pred))))
+  y.pred<-y.pred %% (2 * pi)
+  resi[order]<-mean(cos((y.test - y.pred) %% (2 * pi)))
+  circ.lm <- lm.circular.cc(y.train, x.train, order=order)
+  cmodel<-circ.lm$cmodel
+  smodel<-circ.lm$smodel
+  cosy_pred <- predict(cmodel, newdata=as.data.frame(cosy.test[,-1]))
+  siny_pred <- predict(smodel, newdata=as.data.frame(siny.test[,-1]))
+  y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.lm[order] <- mean(as.numeric(abs(y.test - y.pred) %% (2 * pi)))
+  #resi.lm[order] <- mean(abs(y.test - y.pred)**2 )
+  resi.lm[order] <- abs(as.numeric(mean(abs(y.test - y.pred))))
+  y.pred<-y.pred %% (2 * pi)
+  resi.lm[order]<-mean(cos((y.test - y.pred) %% (2 * pi)))
+  #cv_model <- cv.glmnet(as.matrix(cosy.train[-1]), as.matrix(cosy.train[1]), alpha = 1)
+
+#best_lambda <- cv_model$lambda.min
+#best_model <- glmnet(as.matrix(cosy.train[-1]), as.matrix(cosy.train[1]), alpha = 1, lambda = best_lambda)
+#cosy_pred<-predict(best_model, s = best_lambda, newx = as.matrix(cosy.test[-1]))
+#cv_model <- cv.glmnet(as.matrix(siny.train[-1]), as.matrix(siny.train[1]), alpha = 1)
+
+#best_lambda <- cv_model$lambda.min
+#best_model <- glmnet(as.matrix(siny.train[-1]), as.matrix(siny.train[1]), alpha = 1, lambda = best_lambda)
+#siny_pred<-predict(best_model, s = best_lambda, newx = as.matrix(siny.test[-1]))
+#y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.lasso[order] <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi)))
+}
+if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==1) {k1<-k1+1}
+if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==2) {k2<-k2+1}
+if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==3) {k3<-k3+1}
+#if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==4) {k4<-k4+1}
+rpca[B]<-mean(resi.pca)
+rpls[B]<-mean(resi)
+rraw[B]<-mean(resi.lm)
+#rlasso[B]<-mean(resi.lasso)
+#print(mean(resi.lasso[1]))
+#print(mean(resi.pca))
+#print(mean(resi))
+#print(mean(resi.lm))
+
+}
+#k1/5000
+#k2/5000
+#k3/5000
+re<-cbind(PCA=rpca,PLS=rpls,CC=rraw)
+par(mfrow = c(1, ncol(re)))
+#boxplot(re, col = rainbow(ncol(re)),main="rse for medium multicollinearity")
+re<-reshape2::melt(re)
+colnames(re)<-c("Var1","Methods","MCCR")
+ggplot(re, aes(x=Methods, y=MCCR)) + geom_boxplot()+labs(title="MCCR (Medium Multicollinearity)")
+```
+
+# Dimension reduction on dataset with high multicollinearity
+```{r,warning=F}
+set.seed(123)
+library(CircSpaceTime)
+library(glmnet)
+data(april)
+library(pls)
+library(pracma)
+k1<-0
+k2<-0
+k3<-0
+k4<-0
+rpca<-rep(NA,5000)
+rpls<-rep(NA,5000)
+rraw<-rep(NA,5000)
+rlasso<-rep(NA,5000)
+for (B in 1:5000) {
+data1 <- circular(runif(400, 0, pi))
+#data1<-circular(rvonmises(400, 0, 1))
+data2 <- data1 + pi+rvonmises(400,0,5)
+#data2 <- 0.5*data1 + pi+rvonmises(400,0,2)
+data3 <- circular(runif(400, 0, 2*pi))
+#data1<-circular(rvonmises(400, 0, 1))
+data4<-(data1+data3)/2
+data4<-data3 + pi+rvonmises(400,0,5)
+circ.cor(data1, data2, test=TRUE)
+#x<-deg2rad(april$apr2.2010[april$apr2.2010$hour=="00:00",3])
+#x2<-deg2rad(april$apr2.2010[april$apr2.2010$hour=="00:00",4])
+#x3<-(x+x2)/2
+#x1<-circular(cbind(x,x2))
+#y3<-circular(deg2rad(april$apr2.2010[april$apr2.2010$hour=="00:00",6]))
+x1 <- circular(cbind(data1,data2,data3))
+y3 <- simu(x1,5)
+#x1 <- circular(cbind(runif(400, 0, 2*pi),runif(400, 0, 2*pi)))
+#y3 <- atan2(0.15*cos(x[,1]) + 0.25*sin(x[,1])+0.35*cos(x[,2])+ 0.2*sin(x[,2]), 0.35*sin(x[,1])+0.4*sin(x[,2])) + rvonmises(n=400, mu=circular(0), kappa=5)
+sample.size <- floor(0.3 * nrow(x1))
+train.index <- sample(seq_len(nrow(x1)), size = sample.size)
+x.train <- x1[train.index, ]
+x.test <- x1[- train.index, ]
+y.train <- y3[train.index]
+y.test <- y3[- train.index]
+resi.pca<-rep(NA,5)
+resi.lm<-rep(NA,5)
+resi<-rep(NA,5)
+resi.lasso<-rep(NA,5)
+for (order in 1:5) {
+  y3 <- simu(x1,order)
+m<-ifelse(is.null(ncol(x.train)),1,ncol(x.train))
+  n1 <- length(x.train[,1])
+  order.matrix1 <- t(matrix(rep(c(1:order), n1), ncol = n1))
+  n2 <- length(x.test[,1])
+  order.matrix2 <- t(matrix(rep(c(1:order), n2), ncol = n2))
+  cos.x.train<-cos(x.train[,1] * order.matrix1)
+  sin.x.train<-sin(x.train[,1] * order.matrix1)
+  cos.x.test<-cos(x.test[,1] * order.matrix2)
+  sin.x.test<-sin(x.test[,1] * order.matrix2)
+for (i in 2:m) {
+    
+    cos.x.train <- cbind(cos.x.train,cos(x.train[,i] * order.matrix1))
+    sin.x.train <- cbind(sin.x.train,sin(x.train[,i] * order.matrix1))
+    cos.x.test <- cbind(cos.x.test,cos(x.test[,i] * order.matrix2))
+    sin.x.test <- cbind(sin.x.test,sin(x.test[,i] * order.matrix2))
+  }
+    cy.train <- cos(y.train)
+    sy.train <- sin(y.train)
+    cy.test <- cos(y.test)
+    sy.test <- sin(y.test)
+    #cosy.train<-as.data.frame(cbind(cy.train,cos.x.train,sin.x.train))
+    #siny.train<-as.data.frame(cbind(sy.train,cos.x.train,sin.x.train))
+    #cosy.test<-as.data.frame(cbind(cy.test,cos.x.test,sin.x.test))
+    #siny.test<-as.data.frame(cbind(sy.test,cos.x.test,sin.x.test))
+    cosy.train<-as.data.frame(cy.train)
+    siny.train<-as.data.frame(sy.train)
+    cosy.test<-as.data.frame(cy.test)
+    siny.test<-as.data.frame(sy.test)
+    for (j in 1:ncol(cos.x.test)) {
+      cosy.train<-as.data.frame(cbind(cosy.train,cos.x.train[,j],sin.x.train[,j]))
+      siny.train<-as.data.frame(cbind(siny.train,cos.x.train[,j],sin.x.train[,j]))
+      cosy.test<-as.data.frame(cbind(cosy.test,cos.x.test[,j],sin.x.test[,j]))
+      siny.test<-as.data.frame(cbind(siny.test,cos.x.test[,j],sin.x.test[,j]))
+    }
+    colnames(cosy.train)<-1:(2*ncol(cos.x.test)+1)
+    colnames(siny.train)<-1:(2*ncol(cos.x.test)+1)
+    colnames(cosy.test)<-1:(2*ncol(cos.x.test)+1)
+    colnames(siny.test)<-1:(2*ncol(cos.x.test)+1)
+  #cossinx<-cbind(cos.x,sin.x)
+  pr<-prcomp(cosy.train[,-1])
+  #summary(pr)
+  #print(pr$loadings)
+  #n<-as.numeric(which(cumsum(attr(scores(pr),which="explvar"))>=80)[1])
+  #df1<-abs(pr$loadings[,1:n])
+  #print(rowsum(df1, as.integer(gl(nrow(df1), 2, nrow(df1)))))
+  #print(n)
+  #pr2<-prcomp(cossinx)
+  #eig<-pr2$sdev^2
+  #(var<-eig*100/sum(eig))
+  #(cumvar<-cumsum(var))
+  #model1 <- pcr(cy.train~., data=cosy.train,scale=TRUE, validation="CV")
+  #model2 <- pcr(sy.train~., data=siny.train,scale=TRUE, validation="CV")
+  #print(summary(model1))
+  #print(summary(model2))
+  #print(model1$loadings)
+  spr<-summary(pr)
+  l<-min(which(spr$importance[3,]>=0.8))
+  #if (l==1) {l<-2}
+  xpca.train<-as.data.frame(pr$x[,1:l])
+  #colnames(x.pca)<-1:ncol(x.pca)
+  #print(spr$rotation)
+  
+  #
+  #y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  xpca.test1 <- predict(pr, newdata=cosy.test[,-1])
+  xpca.test<-xpca.test1[,1:l]
+  cy.pca<-as.data.frame(cbind(cy.train,xpca.train))
+  sy.pca<-as.data.frame(cbind(sy.train,xpca.train))
+  cmodel <- lm(cy.train~.,data=cy.pca)
+  smodel <- lm(sy.train~.,data=sy.pca)
+  cosy_pred <- predict(cmodel, newdata=as.data.frame(xpca.test))
+  siny_pred <- predict(smodel, newdata=as.data.frame(xpca.test))
+  y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.pca[order] <- mean(as.numeric(abs(y.test - y.pred) %% (2 * pi)))
+  #resi.pca[order] <- mean(abs(y.test - y.pred)**2 )
+  #resi.pca[order] <- abs(as.numeric(mean(abs(y.test - y.pred))))
+  y.pred<-y.pred %% (2 * pi)
+  resi.pca[order]<-mean(cos((y.test - y.pred) %% (2 * pi)))
+   model1 <- plsr(`1`~., data=cosy.train,scale=TRUE, validation="CV")
+  model2 <- plsr(`1`~., data=siny.train,scale=TRUE, validation="CV")
+   comp<-cumsum(explvar(model1))
+   l2<-min(which(comp>=0.8))
+  
+  #summary(model1)
+  #summary(model2)
+  cosy_pred <- predict(model1,cosy.test[,-1],ncomp=l2)
+  siny_pred <- predict(model2,siny.test[,-1],ncomp=l2)
+  y.pred<-atan2(cosy_pred,siny_pred)
+  #resi[order] <- mean(as.numeric(abs(y.test - y.pred) %% (2 * pi)))
+  #resi[order] <- mean(abs(y.test - y.pred)**2)
+  #resi[order] <- as.numeric(mean(abs(y.test - y.pred)))
+  y.pred<-y.pred %% (2 * pi)
+  resi[order]<-mean(cos((y.test - y.pred) %% (2 * pi)))
+  circ.lm <- lm.circular.cc(y.train, x.train, order=order)
+  cmodel<-circ.lm$cmodel
+  smodel<-circ.lm$smodel
+  cosy_pred <- predict(cmodel, newdata=as.data.frame(cosy.test[,-1]))
+  siny_pred <- predict(smodel, newdata=as.data.frame(siny.test[,-1]))
+  y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.lm[order] <- mean(as.numeric(abs(y.test - y.pred) %% (2 * pi)))
+  #resi.lm[order] <- mean(abs(y.test - y.pred)**2 )
+  #resi.lm[order] <- as.numeric(mean(abs(y.test - y.pred)))
+  y.pred<-y.pred %% (2 * pi)
+  resi.lm[order]<-mean(cos((y.test - y.pred) %% (2 * pi)))
+  #cv_model <- cv.glmnet(as.matrix(cosy.train[-1]), as.matrix(cosy.train[1]), alpha = 1)
+
+#best_lambda <- cv_model$lambda.min
+#best_model <- glmnet(as.matrix(cosy.train[-1]), as.matrix(cosy.train[1]), alpha = 1, lambda = best_lambda)
+#cosy_pred<-predict(best_model, s = best_lambda, newx = as.matrix(cosy.test[-1]))
+#cv_model <- cv.glmnet(as.matrix(siny.train[-1]), as.matrix(siny.train[1]), alpha = 1)
+
+#best_lambda <- cv_model$lambda.min
+#best_model <- glmnet(as.matrix(siny.train[-1]), as.matrix(siny.train[1]), alpha = 1, lambda = best_lambda)
+#siny_pred<-predict(best_model, s = best_lambda, newx = as.matrix(siny.test[-1]))
+#y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.lasso[order] <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi)))
+}
+if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==1) {k1<-k1+1}
+if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==2) {k2<-k2+1}
+if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==3) {k3<-k3+1}
+#if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==4) {k4<-k4+1}
+rpca[B]<-mean(resi.pca)
+rpls[B]<-mean(resi)
+rraw[B]<-mean(resi.lm)
+#rlasso[B]<-mean(resi.lasso)
+#print(mean(resi.lasso[1]))
+#print(mean(resi.pca))
+#print(mean(resi))
+#print(mean(resi.lm))
+
+}
+k1/5000
+k2/5000
+k3/5000
+re<-cbind(PCA=rpca,PLS=rpls,CC=rraw)
+par(mfrow = c(1, ncol(re)))
+#boxplot(re, col = rainbow(ncol(re)),main="rse for high multicollinearity")
+re<-reshape2::melt(re)
+colnames(re)<-c("Var1","Methods","MCCR")
+ggplot(re, aes(x=Methods, y=MCCR)) + geom_boxplot()+labs(title="MCCR (High Multicollinearity)")
+```
+
+# Dimension reduction on dataset with no multicollinearity
+```{r,warning=F}
+set.seed(123)
+library(CircSpaceTime)
+library(glmnet)
+data(april)
+library(pls)
+library(pracma)
+k1<-0
+k2<-0
+k3<-0
+k4<-0
+rpca<-rep(NA,5000)
+rpls<-rep(NA,5000)
+rraw<-rep(NA,5000)
+rlasso<-rep(NA,5000)
+for (B in 1:5000) {
+data1 <- circular(runif(400, 0, pi))
+#data1<-circular(rvonmises(400, 0, 5))
+data2 <- data1 + pi+rvonmises(400,0,5)
+data2 <- 0.5*data1 + pi+rvonmises(400,0,2)
+data2 <- circular(runif(400, pi, 3*pi/2))
+data3 <- circular(runif(400, 0, 2*pi))
+data4<-(data1+data3)/2
+#data4<-data3 + pi+rvonmises(400,0,5)
+circ.cor(data1, data2, test=TRUE)
+#x<-deg2rad(april$apr2.2010[april$apr2.2010$hour=="00:00",3])
+#x2<-deg2rad(april$apr2.2010[april$apr2.2010$hour=="00:00",4])
+#x3<-(x+x2)/2
+#x1<-circular(cbind(x,x2))
+#y3<-circular(deg2rad(april$apr2.2010[april$apr2.2010$hour=="00:00",6]))
+x1 <- circular(cbind(data1,data2,data3))
+#y3 <- simu(x1,1)
+#x1 <- circular(cbind(runif(400, 0, 2*pi),runif(400, 0, 2*pi)))
+#y3 <- atan2(0.15*cos(x[,1]) + 0.25*sin(x[,1])+0.35*cos(x[,2])+ 0.2*sin(x[,2]), 0.35*sin(x[,1])+0.4*sin(x[,2])) + rvonmises(n=400, mu=circular(0), kappa=5)
+sample.size <- floor(0.3 * nrow(x1))
+train.index <- sample(seq_len(nrow(x1)), size = sample.size)
+x.train <- x1[train.index, ]
+x.test <- x1[- train.index, ]
+y.train <- y3[train.index]
+y.test <- y3[- train.index]
+resi.pca<-rep(NA,5)
+resi.lm<-rep(NA,5)
+resi<-rep(NA,5)
+resi.lasso<-rep(NA,5)
+for (order in 1:5) {
+  y3 <- simu(x1,order)
+m<-ifelse(is.null(ncol(x.train)),1,ncol(x.train))
+  n1 <- length(x.train[,1])
+  order.matrix1 <- t(matrix(rep(c(1:order), n1), ncol = n1))
+  n2 <- length(x.test[,1])
+  order.matrix2 <- t(matrix(rep(c(1:order), n2), ncol = n2))
+  cos.x.train<-cos(x.train[,1] * order.matrix1)
+  sin.x.train<-sin(x.train[,1] * order.matrix1)
+  cos.x.test<-cos(x.test[,1] * order.matrix2)
+  sin.x.test<-sin(x.test[,1] * order.matrix2)
+for (i in 2:m) {
+    
+    cos.x.train <- cbind(cos.x.train,cos(x.train[,i] * order.matrix1))
+    sin.x.train <- cbind(sin.x.train,sin(x.train[,i] * order.matrix1))
+    cos.x.test <- cbind(cos.x.test,cos(x.test[,i] * order.matrix2))
+    sin.x.test <- cbind(sin.x.test,sin(x.test[,i] * order.matrix2))
+  }
+    cy.train <- cos(y.train)
+    sy.train <- sin(y.train)
+    cy.test <- cos(y.test)
+    sy.test <- sin(y.test)
+    #cosy.train<-as.data.frame(cbind(cy.train,cos.x.train,sin.x.train))
+    #siny.train<-as.data.frame(cbind(sy.train,cos.x.train,sin.x.train))
+    #cosy.test<-as.data.frame(cbind(cy.test,cos.x.test,sin.x.test))
+    #siny.test<-as.data.frame(cbind(sy.test,cos.x.test,sin.x.test))
+    cosy.train<-as.data.frame(cy.train)
+    siny.train<-as.data.frame(sy.train)
+    cosy.test<-as.data.frame(cy.test)
+    siny.test<-as.data.frame(sy.test)
+    for (j in 1:ncol(cos.x.test)) {
+      cosy.train<-as.data.frame(cbind(cosy.train,cos.x.train[,j],sin.x.train[,j]))
+      siny.train<-as.data.frame(cbind(siny.train,cos.x.train[,j],sin.x.train[,j]))
+      cosy.test<-as.data.frame(cbind(cosy.test,cos.x.test[,j],sin.x.test[,j]))
+      siny.test<-as.data.frame(cbind(siny.test,cos.x.test[,j],sin.x.test[,j]))
+    }
+    colnames(cosy.train)<-1:(2*ncol(cos.x.test)+1)
+    colnames(siny.train)<-1:(2*ncol(cos.x.test)+1)
+    colnames(cosy.test)<-1:(2*ncol(cos.x.test)+1)
+    colnames(siny.test)<-1:(2*ncol(cos.x.test)+1)
+  #cossinx<-cbind(cos.x,sin.x)
+  pr<-prcomp(cosy.train[,-1])
+  #summary(pr)
+  #print(pr$loadings)
+  #n<-as.numeric(which(cumsum(attr(scores(pr),which="explvar"))>=80)[1])
+  #df1<-abs(pr$loadings[,1:n])
+  #print(rowsum(df1, as.integer(gl(nrow(df1), 2, nrow(df1)))))
+  #print(n)
+  #pr2<-prcomp(cossinx)
+  #eig<-pr2$sdev^2
+  #(var<-eig*100/sum(eig))
+  #(cumvar<-cumsum(var))
+  #model1 <- pcr(cy.train~., data=cosy.train,scale=TRUE, validation="CV")
+  #model2 <- pcr(sy.train~., data=siny.train,scale=TRUE, validation="CV")
+  #print(summary(model1))
+  #print(summary(model2))
+  #print(model1$loadings)
+  spr<-summary(pr)
+  l<-min(which(spr$importance[3,]>=0.8))
+  #if (l==1) {l<-2}
+  xpca.train<-as.data.frame(pr$x[,1:l])
+  #colnames(x.pca)<-1:ncol(x.pca)
+  #print(spr$rotation)
+  
+  #
+  #y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  xpca.test1 <- predict(pr, newdata=cosy.test[,-1])
+  xpca.test<-xpca.test1[,1:l]
+  cy.pca<-as.data.frame(cbind(cy.train,xpca.train))
+  sy.pca<-as.data.frame(cbind(sy.train,xpca.train))
+  cmodel <- lm(cy.train~.,data=cy.pca)
+  smodel <- lm(sy.train~.,data=sy.pca)
+  cosy_pred <- predict(cmodel, newdata=as.data.frame(xpca.test))
+  siny_pred <- predict(smodel, newdata=as.data.frame(xpca.test))
+  y.pred<-atan2(cosy_pred,siny_pred)
+  
+  resi.pca[order] <- mean(as.numeric(abs(y.test - y.pred) %% (2 * pi)))
+  resi.pca[order] <- mean(abs(y.test - y.pred)**2 )
+  resi.pca[order] <- as.numeric(mean(abs(y.test - y.pred)))
+  y.pred<-y.pred %% (2 * pi)
+  resi.pca[order]<-mean(cos((y.test - y.pred) %% (2 * pi)))
+   model1 <- plsr(`1`~., data=cosy.train,scale=TRUE, validation="CV")
+  model2 <- plsr(`1`~., data=siny.train,scale=TRUE, validation="CV")
+   comp<-cumsum(explvar(model1))
+   l2<-min(which(comp>=0.8))
+  
+  #summary(model1)
+  #summary(model2)
+  cosy_pred <- predict(model1,cosy.test[,-1],ncomp=l2)
+  siny_pred <- predict(model2,siny.test[,-1],ncomp=l2)
+  y.pred<-atan2(cosy_pred,siny_pred)
+  resi[order] <- mean(as.numeric(abs(y.test - y.pred) %% (2 * pi)))
+  resi[order] <- mean(abs(y.test - y.pred)**2)
+  resi[order] <- as.numeric(mean(abs(y.test - y.pred)))
+  y.pred<-y.pred %% (2 * pi)
+  resi[order]<-mean(cos((y.test - y.pred) %% (2 * pi)))
+  circ.lm <- lm.circular.cc(y.train, x.train, order=order)
+  cmodel<-circ.lm$cmodel
+  smodel<-circ.lm$smodel
+  cosy_pred <- predict(cmodel, newdata=as.data.frame(cosy.test[,-1]))
+  siny_pred <- predict(smodel, newdata=as.data.frame(siny.test[,-1]))
+  y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.lm[order] <- mean(as.numeric(abs(y.test - y.pred) %% (2 * pi)))
+  #resi.lm[order] <- mean(abs(y.test - y.pred)**2 )
+  #resi.lm[order] <- as.numeric(mean(abs(y.test - y.pred)))
+  y.pred<-y.pred %% (2 * pi)
+  resi.lm[order]<-mean(cos((y.test - y.pred) %% (2 * pi)))
+  #cv_model <- cv.glmnet(as.matrix(cosy.train[-1]), as.matrix(cosy.train[1]), alpha = 1)
+
+#best_lambda <- cv_model$lambda.min
+#best_model <- glmnet(as.matrix(cosy.train[-1]), as.matrix(cosy.train[1]), alpha = 1, lambda = best_lambda)
+#cosy_pred<-predict(best_model, s = best_lambda, newx = as.matrix(cosy.test[-1]))
+#cv_model <- cv.glmnet(as.matrix(siny.train[-1]), as.matrix(siny.train[1]), alpha = 1)
+
+#best_lambda <- cv_model$lambda.min
+#best_model <- glmnet(as.matrix(siny.train[-1]), as.matrix(siny.train[1]), alpha = 1, lambda = best_lambda)
+#siny_pred<-predict(best_model, s = best_lambda, newx = as.matrix(siny.test[-1]))
+#y.pred<-atan2(cosy_pred,siny_pred)
+  #print(resi <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi))))
+  #resi.lasso[order] <- as.numeric(mean(abs(y.test - y.pred) %% (2 * pi)))
+}
+if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==1) {k1<-k1+1}
+if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==2) {k2<-k2+1}
+if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==3) {k3<-k3+1}
+#if (which.min(c(mean(resi.lm),mean(resi.pca),mean(resi)))==4) {k4<-k4+1}
+rpca[B]<-mean(resi.pca)
+rpls[B]<-mean(resi)
+rraw[B]<-mean(resi.lm)
+#rlasso[B]<-mean(resi.lasso)
+#print(mean(resi.lasso[1]))
+#print(mean(resi.pca))
+#print(mean(resi))
+#print(mean(resi.lm))
+
+}
+k1/5000
+k2/5000
+k3/5000
+re<-cbind(PCA=rpca,PLS=rpls,CC=rraw)
+par(mfrow = c(1, ncol(re)))
+#boxplot(re, col = rainbow(ncol(re)),main="rse for no multicollinearity")
+re<-reshape2::melt(re)
+colnames(re)<-c("Var1","Methods","MCCR")
+ggplot(re, aes(x=Methods, y=MCCR)) + geom_boxplot()+labs(title="MCCR (No Multicollinearity)")
+```
+
+
+
+#determination of order m of multiple circular regression model and regression model with both linear and circular covariates and different error terms
+
+```{r,warning=F}
+
+install.packages("circular")
+install.packages("CircStats")
+library(circular)
+library(CircStats)
+#library(synfd)
+lm.circular.cc <- function(y, x, order, level = 0.05, control.circular=list()) {
+  # Handling missing values
+  #order<-2
+  #level<-0.05
+  control.circular=list()
+  #ok <- complete.cases(x, y)
+  #x <- x[ok]
+  #y <- y[ok]
+  if (length(x)==0) {
+    warning("No observations (at least after removing missing values)")
+    return(NULL)
+  }
+  
+  if (is.circular(y)) {
+    datacircularp <- circularp(y)     
+  } else if (is.circular(x)) {
+    datacircularp <- circularp(x)     
+  } else {
+    datacircularp <- list(type="angles", units="radians", template="none", modulo="2pi", zero=0, rotation="counter")
+  }
+  
+  dc <- control.circular
+  if (is.null(dc$type))
+    dc$type <- datacircularp$type
+  if (is.null(dc$units))
+    dc$units <- datacircularp$units
+  if (is.null(dc$template))
+    dc$template <- datacircularp$template
+  if (is.null(dc$modulo))
+    dc$modulo <- datacircularp$modulo
+  if (is.null(dc$zero))
+    dc$zero <- datacircularp$zero
+  if (is.null(dc$rotation))
+    dc$rotation <- datacircularp$rotation
+  
+  x <- conversion.circular(x, units="radians", zero=0, rotation="counter", modulo="2pi")
+  attr(x, "circularp") <- attr(x, "class") <- NULL
+  y <- conversion.circular(y, units="radians", zero=0, rotation="counter", modulo="2pi")
+  attr(y, "circularp") <- attr(y, "class") <- NULL
+  
+  circ.lm <- LmCircularccRad(y, x, order)
+  
+  circ.lm$call <- match.call()
+  circ.lm$fitted <- conversion.circular(circular(circ.lm$fitted), dc$units, dc$type, dc$template, dc$modulo, dc$zero, dc$rotation)
+  circ.lm$residuals <- conversion.circular(circular(circ.lm$residuals), dc$units, dc$type, dc$template, dc$modulo, dc$zero, dc$rotation)    
+  if (circ.lm$p.values[1] > level & circ.lm$p.values[2] > level) {
+    circ.lm$message <- paste("Higher order terms are not significant at the ", level, " level", sep = "")
+  } else {
+    circ.lm$message <- paste("Higher order terms are significant at the ", level, " level", sep = "")
+  }
+  class(circ.lm) <- "lm.circular.cc"
+  return(circ.lm)
+}
+
+
+LmCircularccRad <- function(y, x, order) {
+  
+  m<-ifelse(is.null(ncol(x)),1,ncol(x))
+  n <- length(x[,1])
+  order.matrix <- t(matrix(rep(c(1:order), n), ncol = n))
+  cos.x<-cos(as.numeric(x[,1]) * order.matrix)
+  sin.x<-sin(as.numeric(x[,1]) * order.matrix)
+  if (m>1) {
+    for (i in 2:m) {
+      
+      cos.x <- cbind(cos.x,cos(as.numeric(x[,i]) * order.matrix))
+      sin.x <- cbind(sin.x,sin(as.numeric(x[,i]) * order.matrix))
+    }
+  }
+  cy <- cos(y)
+  sy <- sin(y)
+  
+  cosy<-as.data.frame(cbind(cy,cos.x,sin.x))
+  siny<-as.data.frame(cbind(sy,cos.x,sin.x))
+  colnames(cosy)<-c("cy",2:ncol(cosy))
+  colnames(siny)<-c("sy",2:ncol(siny))
+  cos.lm <- lm(cy ~ .,data=cosy)
+  sin.lm <- lm(sy ~ .,data=siny)
+  #print(summary(cos.lm))
+  aic.cos<-AIC(cos.lm)
+  aic.sin<-AIC(sin.lm)
+  bic.cos<-BIC(cos.lm)
+  bic.sin<-BIC(sin.lm)
+  cos.fit <- cos.lm$fitted
+  sin.fit <- sin.lm$fitted
+  cosrsq<-summary(cos.lm)$adj.r.squared
+  sinrsq<-summary(sin.lm)$adj.r.squared
+  g1.sq <- t(cos.fit) %*% cos.fit
+  g2.sq <- t(sin.fit) %*% sin.fit
+  rho <- sqrt((g1.sq + g2.sq)/n)
+  y.fitted <- atan2(sin.fit, cos.fit)
+  Y1 <- cy
+  Y2 <- sy
+  ones <- matrix(1, n, 1)
+  X <- cbind(ones, cos.x, sin.x)
+  W <- cbind(cos((order + 1) * x), sin((order + 1) * x))
+  M <- X %*% solve(t(X) %*% X,tol=1e-5000) %*% t(X)
+  I <- diag(n)
+  H <- t(W) %*% (I - M) %*% W
+  N <- W %*% solve(H,tol=1e-5000) %*% t(W)
+  cc <- n - (2 * order + 1)
+  N1 <- t(Y1) %*% (I - M) %*% N %*% (I - M) %*% Y1
+  D1 <- t(Y1) %*% (I - M) %*% Y1
+  T1 <- cc * (N1/D1)
+  N2 <- t(Y2) %*% (I - M) %*% N %*% (I - M) %*% Y2
+  D2 <- t(Y2) %*% (I - M) %*% Y2
+  T2 <- cc * (N2/D2)
+  F1 <- T1 / 2
+  F2 <- T2 / 2
+  p1 <- 1 - pchisq(T1, 2)
+  p2 <- 1 - pchisq(T2, 2)
+  pvalues <- cbind(p1, p2)
+  circ.lm <- list()
+  circ.lm$rho <- rho
+  circ.lm$fitted <- y.fitted %% (2 * pi)
+  circ.lm$x <- cbind(x, y)
+  circ.lm$residuals <- (y - y.fitted) %% (2 * pi)
+  circ.lm$coefficients <- cbind(cos.lm$coefficients, sin.lm$coefficients)
+  circ.lm$p.values <- pvalues
+  circ.lm$A.k <- mean(cos(circ.lm$residuals))
+  circ.lm$kappa <- A1inv(circ.lm$A.k)
+  circ.lm$R0T<-c(T1,T2)
+  circ.lm$R0F<-c(F1,F2)
+  circ.lm$rsq<-c(cosrsq,sinrsq)
+  circ.lm$essq<-c(N1,N2)
+  circ.lm$inf<-c(aic.cos,aic.sin,bic.cos,bic.sin)
+  circ.lm$cmodel<-cos.lm
+  circ.lm$smodel<-sin.lm
+  return(circ.lm)
+}
+#x <- as.matrix(circular(runif(50, 0, 2*pi)))
+
+#simu<-function(x,m) {
+#as<-seq(0.05,0.5,0.05)
+#as1<-sample(seq(0.05,0.5,0.05),ncol(x)*m,replace=T)
+#as2<-sample(seq(0.05,0.5,0.05),ncol(x)*m,replace=T)
+#y1<-0
+#y2<-0
+#for (i in 0:(m-1)) {
+#y1<-y1+rowSums(t(sample(as,ncol(x),replace=T)*t(cos((i+1)*x))))+rowSums(t(sample(as,ncol(x),replace=T)*t(sin((i+1)*x))))
+# y2<-y2+rowSums(t(sample(as,ncol(x),replace=T)*t(sin((i+1)*x))))
+#}
+#y<-atan2(y1,y2)+rvonmises(n=nrow(x), mu=circular(0), kappa=5)
+#return(y)
+#}
+
+simu<-function(x,m,tt) {
+  as<-seq(0.05,0.5,0.05)
+  y1<-0
+  y2<-0
+  
+  for (i in 0:(m-1)) {
+    co<-sample(as,ncol(x),replace=T)
+    y1<-y1+rowSums(t(co*t(cos((i+1)*x))))+rowSums(t(co*t(sin((i+1)*x))))
+    co<-sample(as,ncol(x),replace=T)
+    y2<-y2+rowSums(t(co*t(sin((i+1)*x)))) +rowSums(t(co*t(sin((i+1)*x))))
+  }
+  if (tt==1) {y<-atan2(y1,y2)+rvonmises(n=nrow(x), mu=circular(0), kappa=5)} # Von-Mises error term
+  if (tt==2) {y<-atan2(y1,y2)+rwrappednormal(n=nrow(x), mu = circular(0), sd = sqrt(-2*log(besselI(5,1)/besselI(5,0))), control.circular = list())} # Wrapped Normal error term
+  if (tt==3) {y<-atan2(y1,y2)+rwrpcauchy(n=nrow(x), location=0, rho=besselI(5,1)/besselI(5,0))} # Wrapped Cauchy error term
+  return(y)
+}
+simu2<-function(x,m,xx,tt) {
+  as<-seq(0.05,0.5,0.05)
+  y1<-0
+  y2<-0
+  
+  for (i in 0:(m-1)) {
+    co<-sample(as,ncol(x),replace=T)
+    y1<-y1+rowSums(t(co*t(cos((i+1)*x))))+rowSums(t(co*t(sin((i+1)*x))))+rowSums(rnorm(n=nrow(xx),0,1)*xx)
+    co<-sample(as,ncol(x),replace=T)
+    y2<-y2+rowSums(t(co*t(sin((i+1)*x)))) +rowSums(t(co*t(sin((i+1)*x))))
+  }
+  if (tt==1) {y<-atan2(y1,y2)+rvonmises(n=nrow(x), mu=circular(0), kappa=5)}
+  if (tt==2) {y<-atan2(y1,y2)+rwrappednormal(n=nrow(x), mu = circular(0), sd = sqrt(-2*log(besselI(5,1)/besselI(5,0))), control.circular = list())}
+  if (tt==3) {y<-atan2(y1,y2)+rwrpcauchy(n=nrow(x), location=0, rho=besselI(5,1)/besselI(5,0))}
+  
+  return(y)
+}
+B<-500
+#RF<-rep(NA,B)
+n1<-c(100,200,300,500,1000)
+for (tt in 1:3) {
+  set.seed(12)
+  for (n2 in 1:5) {
+    n<-n1[n2]
+    for (nn in 2:6) {
+      for (i in 2:5) {
+      k1<-0
+      k2<-0
+      
+      #lm.circular.cc(y, x, order=1)
+      for (ii in 1:B) {
+        
+          
+          RN<-matrix(nrow=5,ncol=2)
+          #x <- circular(cbind(runif(400, 0, 2*pi)))
+          #n<-runif(1,200,800)
+          #nn<-sample(2:6,1)
+          x <- circular(replicate(nn,runif(n, 0, 2*pi)))
+          #x <- circular(cbind(runif(400, 0, 2*pi),runif(400, 0, 2*pi),runif(400, 0, 2*pi)))
+          # Fit a circular-circular regression model.
+          y<-simu(x,i,tt)
+          #watson(circular(y),dist='vm')  
+          R0T<-matrix(nrow=5,ncol=3)
+          R0F<-matrix(nrow=5,ncol=3)
+          R0N<-matrix(nrow=5,ncol=3)
+          for (s in 1:5)  {
+            circ.lm <- lm.circular.cc(y, x, order=s)
+            #circ.lm <- lm.circular.cc(y, x, order=s)
+            RN[s,]<-circ.lm$essq
+            circ.lm$fitted[circ.lm$fitted>pi] <- circ.lm$fitted[circ.lm$fitted>pi] - 2*pi
+            #R0T[s,]<-c(circ.lm$R0T,qchisq(0.95,2))
+            #R0F[s,]<-c(circ.lm$R0F,qf(0.95,2,n-2*i-1))
+            #if (R0F[s,3]==max(R0F[s,]) && is.na(RF[i])) {
+            #RF[i]<-s
+            #}
+            
+          }
+          drop1<-diff(RN[,1])
+          drop2<-diff(RN[,1])
+          if(which.min(drop1)+1==i) {k1<-k1+1}
+          if(which.min(drop2)+1==i) {k2<-k2+1}
+          #print(RN)
+          #plot(RN[,1],type="o",ylim=c(0,100),xlab="order",ylab="reduction of error sum of squares")
+          #lines(RN[,2],type="o")
+        }
+      print(c(tt,n,nn,i,k1/B,k2/B))
+      }
+      #table(RF)
+    }
+  }
+}
+B<-500
+n1<-c(100,200,300,500,1000)
+for (tt in 1:3) {
+  for (n2 in 1:5) {
+    n<-n1[n2]
+    for (nn in 2:6) {
+      for (i in 2:5) {
+      k1<-0
+      k2<-0
+      for (kk in 1:B) {
+        
+        
+        
+        
+          #n<-runif(1,200,800)
+          xx <- cbind(rnorm(n), rnorm(n,0,2),rnorm(n,0,3),runif(n))
+          #yy <- circular(2*atan(c(as.matrix(xx)%*%c(0.35,0.25,0.2,0.25))))#+rvonmises(1000, mu=circular(0), kappa=5)
+          yy <- circular(c(as.matrix(xx)%*%c(0.35,0.25,0.2,0.25)))
+          #lm.circular(y=yy, x=as.matrix(xx), init=c(0.35,0.25,0.2,0.25), type='c-l', verbose=TRUE)
+          
+          x <- circular(replicate(nn,runif(n, 0, 2*pi)))
+          #yy2<-simu2(x,i)
+          #y<-atan(0.3*yy+0.7*yy2)+rvonmises(n, mu=circular(0), kappa=5)
+          y<-simu2(x,i,xx,tt)
+          xx1<-cbind(x,xx)
+          
+          #x<-circular(april$apr2.2010[april$apr2.2010$hour=="00:00",3:4])
+          #y<-circular(april$apr2.2010[april$apr2.2010$hour=="00:00",6])
+          #xx<-circular(april$apr2.2010[april$apr2.2010$hour=="00:00",5])
+          #xx1<-cbind(x,xx)
+          #y<-simu.mix(xx1,2,i)
+          RN<-matrix(nrow=5,ncol=2)
+          for (s in 1:5)  {
+            order<-s
+            m<-ifelse(is.null(ncol(x)),1,ncol(x))
+            n <- length(x[,1])
+            order.matrix <- t(matrix(rep(c(1:order), n), ncol = n))
+            cos.x<-cos(as.numeric(x[,1]) * order.matrix)
+            sin.x<-sin(as.numeric(x[,1]) * order.matrix)
+            if (m>1) {
+              for (ij in 2:m) {
+                
+                cos.x <- cbind(cos.x,cos(as.numeric(x[,ij]) * order.matrix))
+                sin.x <- cbind(sin.x,sin(as.numeric(x[,ij]) * order.matrix))
+              }
+            }
+            cy <- cos(y)
+            sy <- sin(y)
+            
+            cosy<-as.data.frame(cbind(cy,cos.x,sin.x,xx))
+            siny<-as.data.frame(cbind(sy,cos.x,sin.x,xx))
+            cos.lm <- lm(cy ~ .,data=cosy)
+            sin.lm <- lm(sy ~ .,data=siny)
+            #print(summary(cos.lm))
+            aic.cos<-AIC(cos.lm)
+            aic.sin<-AIC(sin.lm)
+            bic.cos<-BIC(cos.lm)
+            bic.sin<-BIC(sin.lm)
+            cos.fit <- cos.lm$fitted
+            sin.fit <- sin.lm$fitted
+            cosrsq<-summary(cos.lm)$adj.r.squared
+            sinrsq<-summary(sin.lm)$adj.r.squared
+            g1.sq <- t(cos.fit) %*% cos.fit
+            g2.sq <- t(sin.fit) %*% sin.fit
+            rho <- sqrt((g1.sq + g2.sq)/n)
+            y.fitted <- atan2(sin.fit, cos.fit)
+            Y1 <- cy
+            Y2 <- sy
+            ones <- matrix(1, n, 1)
+            X <- cbind(ones, cos.x, sin.x)
+            W <- cbind(cos((order + 1) * x), sin((order + 1) * x))
+            M <- X %*% solve(t(X) %*% X,tol=1e-80) %*% t(X)
+            I <- diag(n)
+            H <- t(W) %*% (I - M) %*% W
+            N <- W %*% solve(H,tol=1e-80) %*% t(W)
+            cc <- n - (2 * order + 1)
+            N1 <- t(Y1) %*% (I - M) %*% N %*% (I - M) %*% Y1
+            D1 <- t(Y1) %*% (I - M) %*% Y1
+            T1 <- cc * (N1/D1)
+            N2 <- t(Y2) %*% (I - M) %*% N %*% (I - M) %*% Y2
+            RN[s,]<-c(N1,N2) 
+            #print(c(cosrsq,sinrsq))
+            
+          }
+          drop1<-diff(RN[,1])
+          drop2<-diff(RN[,1])
+          if(which.min(drop1)+1==i) {k1<-k1+1}
+          if(which.min(drop2)+1==i) {k2<-k2+1}
+          #print(drop1)
+          #print(drop2)
+          #print(RN)
+          #plot(RN[,1],type="o",ylim=c(0,100))
+          #lines(RN[,2],type="o")
+        }
+        print(c(tt,n,nn,i,k1/B,k2/B))  
+      }
+      
+    }
+  }
+}
+set.seed(12)
+install.packages("circular")
+install.packages("CircStats")
+library(circular)
+library(CircStats)
+#library(synfd)
+lm.circular.cc <- function(y, x, order, level = 0.05, control.circular=list()) {
+  # Handling missing values
+  #order<-2
+  #level<-0.05
+  control.circular=list()
+  #ok <- complete.cases(x, y)
+  #x <- x[ok]
+  #y <- y[ok]
+  if (length(x)==0) {
+    warning("No observations (at least after removing missing values)")
+    return(NULL)
+  }
+  
+  if (is.circular(y)) {
+    datacircularp <- circularp(y)     
+  } else if (is.circular(x)) {
+    datacircularp <- circularp(x)     
+  } else {
+    datacircularp <- list(type="angles", units="radians", template="none", modulo="2pi", zero=0, rotation="counter")
+  }
+  
+  dc <- control.circular
+  if (is.null(dc$type))
+    dc$type <- datacircularp$type
+  if (is.null(dc$units))
+    dc$units <- datacircularp$units
+  if (is.null(dc$template))
+    dc$template <- datacircularp$template
+  if (is.null(dc$modulo))
+    dc$modulo <- datacircularp$modulo
+  if (is.null(dc$zero))
+    dc$zero <- datacircularp$zero
+  if (is.null(dc$rotation))
+    dc$rotation <- datacircularp$rotation
+  
+  x <- conversion.circular(x, units="radians", zero=0, rotation="counter", modulo="2pi")
+  attr(x, "circularp") <- attr(x, "class") <- NULL
+  y <- conversion.circular(y, units="radians", zero=0, rotation="counter", modulo="2pi")
+  attr(y, "circularp") <- attr(y, "class") <- NULL
+  
+  circ.lm <- LmCircularccRad(y, x, order)
+  
+  circ.lm$call <- match.call()
+  circ.lm$fitted <- conversion.circular(circular(circ.lm$fitted), dc$units, dc$type, dc$template, dc$modulo, dc$zero, dc$rotation)
+  circ.lm$residuals <- conversion.circular(circular(circ.lm$residuals), dc$units, dc$type, dc$template, dc$modulo, dc$zero, dc$rotation)    
+  if (circ.lm$p.values[1] > level & circ.lm$p.values[2] > level) {
+    circ.lm$message <- paste("Higher order terms are not significant at the ", level, " level", sep = "")
+  } else {
+    circ.lm$message <- paste("Higher order terms are significant at the ", level, " level", sep = "")
+  }
+  class(circ.lm) <- "lm.circular.cc"
+  return(circ.lm)
+}
+
+
+LmCircularccRad <- function(y, x, order) {
+  
+  m<-ifelse(is.null(ncol(x)),1,ncol(x))
+  n <- length(x[,1])
+  order.matrix <- t(matrix(rep(c(1:order), n), ncol = n))
+  cos.x<-cos(as.numeric(x[,1]) * order.matrix)
+  sin.x<-sin(as.numeric(x[,1]) * order.matrix)
+  if (m>1) {
+    for (i in 2:m) {
+      
+      cos.x <- cbind(cos.x,cos(as.numeric(x[,i]) * order.matrix))
+      sin.x <- cbind(sin.x,sin(as.numeric(x[,i]) * order.matrix))
+    }
+  }
+  cy <- cos(y)
+  sy <- sin(y)
+  
+  cosy<-as.data.frame(cbind(cy,cos.x,sin.x))
+  siny<-as.data.frame(cbind(sy,cos.x,sin.x))
+  colnames(cosy)<-c("cy",2:ncol(cosy))
+  colnames(siny)<-c("sy",2:ncol(siny))
+  cos.lm <- lm(cy ~ .,data=cosy)
+  sin.lm <- lm(sy ~ .,data=siny)
+  #print(summary(cos.lm))
+  aic.cos<-AIC(cos.lm)
+  aic.sin<-AIC(sin.lm)
+  bic.cos<-BIC(cos.lm)
+  bic.sin<-BIC(sin.lm)
+  cos.fit <- cos.lm$fitted
+  sin.fit <- sin.lm$fitted
+  cosrsq<-summary(cos.lm)$adj.r.squared
+  sinrsq<-summary(sin.lm)$adj.r.squared
+  g1.sq <- t(cos.fit) %*% cos.fit
+  g2.sq <- t(sin.fit) %*% sin.fit
+  rho <- sqrt((g1.sq + g2.sq)/n)
+  y.fitted <- atan2(sin.fit, cos.fit)
+  Y1 <- cy
+  Y2 <- sy
+  ones <- matrix(1, n, 1)
+  X <- cbind(ones, cos.x, sin.x)
+  W <- cbind(cos((order + 1) * x), sin((order + 1) * x))
+  M <- X %*% solve(t(X) %*% X,tol=1e-5000) %*% t(X)
+  I <- diag(n)
+  H <- t(W) %*% (I - M) %*% W
+  N <- W %*% solve(H,tol=1e-5000) %*% t(W)
+  cc <- n - (2 * order + 1)
+  N1 <- t(Y1) %*% (I - M) %*% N %*% (I - M) %*% Y1
+  D1 <- t(Y1) %*% (I - M) %*% Y1
+  T1 <- cc * (N1/D1)
+  N2 <- t(Y2) %*% (I - M) %*% N %*% (I - M) %*% Y2
+  D2 <- t(Y2) %*% (I - M) %*% Y2
+  T2 <- cc * (N2/D2)
+  F1 <- T1 / 2
+  F2 <- T2 / 2
+  p1 <- 1 - pchisq(T1, 2)
+  p2 <- 1 - pchisq(T2, 2)
+  pvalues <- cbind(p1, p2)
+  circ.lm <- list()
+  circ.lm$rho <- rho
+  circ.lm$fitted <- y.fitted %% (2 * pi)
+  circ.lm$x <- cbind(x, y)
+  circ.lm$residuals <- (y - y.fitted) %% (2 * pi)
+  circ.lm$coefficients <- cbind(cos.lm$coefficients, sin.lm$coefficients)
+  circ.lm$p.values <- pvalues
+  circ.lm$A.k <- mean(cos(circ.lm$residuals))
+  circ.lm$kappa <- A1inv(circ.lm$A.k)
+  circ.lm$R0T<-c(T1,T2)
+  circ.lm$R0F<-c(F1,F2)
+  circ.lm$rsq<-c(cosrsq,sinrsq)
+  circ.lm$essq<-c(N1,N2)
+  circ.lm$inf<-c(aic.cos,aic.sin,bic.cos,bic.sin)
+  circ.lm$cmodel<-cos.lm
+  circ.lm$smodel<-sin.lm
+  return(circ.lm)
+}
+#x <- as.matrix(circular(runif(50, 0, 2*pi)))
+
+#simu<-function(x,m) {
+#as<-seq(0.05,0.5,0.05)
+#as1<-sample(seq(0.05,0.5,0.05),ncol(x)*m,replace=T)
+#as2<-sample(seq(0.05,0.5,0.05),ncol(x)*m,replace=T)
+#y1<-0
+#y2<-0
+#for (i in 0:(m-1)) {
+#y1<-y1+rowSums(t(sample(as,ncol(x),replace=T)*t(cos((i+1)*x))))+rowSums(t(sample(as,ncol(x),replace=T)*t(sin((i+1)*x))))
+# y2<-y2+rowSums(t(sample(as,ncol(x),replace=T)*t(sin((i+1)*x))))
+#}
+#y<-atan2(y1,y2)+rvonmises(n=nrow(x), mu=circular(0), kappa=5)
+#return(y)
+#}
+
+simu<-function(x,m,tt) {
+  as<-seq(0.05,0.5,0.05)
+  y1<-0
+  y2<-0
+  
+  for (i in 0:(m-1)) {
+    co<-sample(as,ncol(x),replace=T)
+    y1<-y1+rowSums(t(co*t(cos((i+1)*x))))+rowSums(t(co*t(sin((i+1)*x))))
+    co<-sample(as,ncol(x),replace=T)
+    y2<-y2+rowSums(t(co*t(sin((i+1)*x)))) +rowSums(t(co*t(sin((i+1)*x))))
+  }
+  if (tt==1) {y<-atan2(y1,y2)+rvonmises(n=nrow(x), mu=circular(0), kappa=0.5)} # Von-Mises error term
+  if (tt==2) {y<-atan2(y1,y2)+rwrappednormal(n=nrow(x), mu = circular(0), sd = sqrt(-2*log(besselI(0.5,1)/besselI(0.5,0))), control.circular = list())} # Wrapped Normal error term
+  if (tt==3) {y<-atan2(y1,y2)+rwrpcauchy(n=nrow(x), location=0, rho=besselI(0.5,1)/besselI(0.5,0))} # Wrapped Cauchy error term
+  return(y)
+}
+simu2<-function(x,m,xx,tt) {
+  as<-seq(0.05,0.5,0.05)
+  y1<-0
+  y2<-0
+  
+  for (i in 0:(m-1)) {
+    co<-sample(as,ncol(x),replace=T)
+    y1<-y1+rowSums(t(co*t(cos((i+1)*x))))+rowSums(t(co*t(sin((i+1)*x))))+rowSums(rnorm(n=nrow(xx),0,1)*xx)
+    co<-sample(as,ncol(x),replace=T)
+    y2<-y2+rowSums(t(co*t(sin((i+1)*x)))) +rowSums(t(co*t(sin((i+1)*x))))
+  }
+  if (tt==1) {y<-atan2(y1,y2)+rvonmises(n=nrow(x), mu=circular(0), kappa=0.5)}
+  if (tt==2) {y<-atan2(y1,y2)+rwrappednormal(n=nrow(x), mu = circular(0), sd = sqrt(-2*log(besselI(0.5,1)/besselI(0.5,0))), control.circular = list())}
+  if (tt==3) {y<-atan2(y1,y2)+rwrpcauchy(n=nrow(x), location=0, rho=besselI(0.5,1)/besselI(0.5,0))}
+  
+  return(y)
+}
+B<-500
+#RF<-rep(NA,B)
+n1<-c(100,200,300,500,1000)
+for (tt in 1:3) {
+  for (n2 in 1:5) {
+    n<-n1[n2]
+    for (nn in 2:6) {
+      
+      for (i in 2:5) {
+      #lm.circular.cc(y, x, order=1)
+      k1<-0
+      k2<-0
+      for (ii in 1:B) {
+        
+          
+          RN<-matrix(nrow=5,ncol=2)
+          #x <- circular(cbind(runif(400, 0, 2*pi)))
+          #n<-runif(1,200,800)
+          #nn<-sample(2:6,1)
+          x <- circular(replicate(nn,runif(n, 0, 2*pi)))
+          #x <- circular(cbind(runif(400, 0, 2*pi),runif(400, 0, 2*pi),runif(400, 0, 2*pi)))
+          # Fit a circular-circular regression model.
+          y<-simu(x,i,tt)
+          #watson(circular(y),dist='vm')  
+          R0T<-matrix(nrow=5,ncol=3)
+          R0F<-matrix(nrow=5,ncol=3)
+          R0N<-matrix(nrow=5,ncol=3)
+          for (s in 1:5)  {
+            circ.lm <- lm.circular.cc(y, x, order=s)
+            #circ.lm <- lm.circular.cc(y, x, order=s)
+            RN[s,]<-circ.lm$essq
+            circ.lm$fitted[circ.lm$fitted>pi] <- circ.lm$fitted[circ.lm$fitted>pi] - 2*pi
+            #R0T[s,]<-c(circ.lm$R0T,qchisq(0.95,2))
+            #R0F[s,]<-c(circ.lm$R0F,qf(0.95,2,n-2*i-1))
+            #if (R0F[s,3]==max(R0F[s,]) && is.na(RF[i])) {
+            #RF[i]<-s
+            #}
+            
+          }
+          drop1<-diff(RN[,1])
+          drop2<-diff(RN[,1])
+          if(which.min(drop1)+1==i) {k1<-k1+1}
+          if(which.min(drop2)+1==i) {k2<-k2+1}
+          #print(RN)
+          #plot(RN[,1],type="o",ylim=c(0,100),xlab="order",ylab="reduction of error sum of squares")
+          #lines(RN[,2],type="o")
+      }
+      print(c(tt,n,nn,i,k1/B,k2/B))
+      }
+      #table(RF)
+      
+    }
+  }
+}
+B<-500
+n1<-c(100,200,300,500,1000)
+for (tt in 1:3) {
+  set.seed(12)
+  for (n2 in 1:5) {
+    n<-n1[n2]
+    for (nn in 2:6) {
+      for (i in 2:5) {
+      k1<-0
+      k2<-0
+      for (kk in 1:B) {
+        
+        
+        
+        
+          #n<-runif(1,200,800)
+          xx <- cbind(rnorm(n), rnorm(n,0,2),rnorm(n,0,3),runif(n))
+          #yy <- circular(2*atan(c(as.matrix(xx)%*%c(0.35,0.25,0.2,0.25))))#+rvonmises(1000, mu=circular(0), kappa=5)
+          yy <- circular(c(as.matrix(xx)%*%c(0.35,0.25,0.2,0.25)))
+          #lm.circular(y=yy, x=as.matrix(xx), init=c(0.35,0.25,0.2,0.25), type='c-l', verbose=TRUE)
+          
+          x <- circular(replicate(nn,runif(n, 0, 2*pi)))
+          #yy2<-simu2(x,i)
+          #y<-atan(0.3*yy+0.7*yy2)+rvonmises(n, mu=circular(0), kappa=5)
+          y<-simu2(x,i,xx,tt)
+          xx1<-cbind(x,xx)
+          
+          #x<-circular(april$apr2.2010[april$apr2.2010$hour=="00:00",3:4])
+          #y<-circular(april$apr2.2010[april$apr2.2010$hour=="00:00",6])
+          #xx<-circular(april$apr2.2010[april$apr2.2010$hour=="00:00",5])
+          #xx1<-cbind(x,xx)
+          #y<-simu.mix(xx1,2,i)
+          RN<-matrix(nrow=5,ncol=2)
+          for (s in 1:5)  {
+            order<-s
+            m<-ifelse(is.null(ncol(x)),1,ncol(x))
+            n <- length(x[,1])
+            order.matrix <- t(matrix(rep(c(1:order), n), ncol = n))
+            cos.x<-cos(as.numeric(x[,1]) * order.matrix)
+            sin.x<-sin(as.numeric(x[,1]) * order.matrix)
+            if (m>1) {
+              for (ij in 2:m) {
+                
+                cos.x <- cbind(cos.x,cos(as.numeric(x[,ij]) * order.matrix))
+                sin.x <- cbind(sin.x,sin(as.numeric(x[,ij]) * order.matrix))
+              }
+            }
+            cy <- cos(y)
+            sy <- sin(y)
+            
+            cosy<-as.data.frame(cbind(cy,cos.x,sin.x,xx))
+            siny<-as.data.frame(cbind(sy,cos.x,sin.x,xx))
+            cos.lm <- lm(cy ~ .,data=cosy)
+            sin.lm <- lm(sy ~ .,data=siny)
+            #print(summary(cos.lm))
+            aic.cos<-AIC(cos.lm)
+            aic.sin<-AIC(sin.lm)
+            bic.cos<-BIC(cos.lm)
+            bic.sin<-BIC(sin.lm)
+            cos.fit <- cos.lm$fitted
+            sin.fit <- sin.lm$fitted
+            cosrsq<-summary(cos.lm)$adj.r.squared
+            sinrsq<-summary(sin.lm)$adj.r.squared
+            g1.sq <- t(cos.fit) %*% cos.fit
+            g2.sq <- t(sin.fit) %*% sin.fit
+            rho <- sqrt((g1.sq + g2.sq)/n)
+            y.fitted <- atan2(sin.fit, cos.fit)
+            Y1 <- cy
+            Y2 <- sy
+            ones <- matrix(1, n, 1)
+            X <- cbind(ones, cos.x, sin.x)
+            W <- cbind(cos((order + 1) * x), sin((order + 1) * x))
+            M <- X %*% solve(t(X) %*% X,tol=1e-80) %*% t(X)
+            I <- diag(n)
+            H <- t(W) %*% (I - M) %*% W
+            N <- W %*% solve(H,tol=1e-80) %*% t(W)
+            cc <- n - (2 * order + 1)
+            N1 <- t(Y1) %*% (I - M) %*% N %*% (I - M) %*% Y1
+            D1 <- t(Y1) %*% (I - M) %*% Y1
+            T1 <- cc * (N1/D1)
+            N2 <- t(Y2) %*% (I - M) %*% N %*% (I - M) %*% Y2
+            RN[s,]<-c(N1,N2) 
+            #print(c(cosrsq,sinrsq))
+            
+          }
+          drop1<-diff(RN[,1])
+          drop2<-diff(RN[,1])
+          if(which.min(drop1)+1==i) {k1<-k1+1}
+          if(which.min(drop2)+1==i) {k2<-k2+1}
+          #print(drop1)
+          #print(drop2)
+          #print(RN)
+          #plot(RN[,1],type="o",ylim=c(0,100))
+          #lines(RN[,2],type="o")
+        }
+      print(c(tt,n,nn,i,k1/B,k2/B)) 
+      }
+      
+    }
+  }
+}
+```
+
+```{r}
+library(REdaS) # Circular median
+library(circular)
+x<-circular(c(1,2,3.1,3.2,3.3,5,6.3,6.6,7))
+plot(x,main="Example of Circular Median",cex=1.5)
+points.circular(1, col="red", pch=15,cex=2)
+points.circular(2, col="green", pch=17,cex=2)
+legend("topleft", legend=c("1", "2"),
+       col=c("red","green"), pch=c(15,17),cex=1.5)
+median(x)
+```
+
+```{r}
+library(MASS)
+sigma<-matrix(c(1,0.85,0.85,1), nrow=2) 
+ff<-function(x)dpnorm(x,mu=c(0.5,0.5),sigma=sigma) # Bimodal Distribution
+curve.circular(ff,join=TRUE, xlim=c(-3.3,3.3),main=expression(paste("Bimodal Distribution")))
+```
+
+```{r}
+ff <- function(x) dwrappednormal(x, mu=circular(pi), sd=sqrt(.75))
+curve.circular(ff, join=TRUE, 
+  main=expression(paste("Density of a Wrapped Normal Distribution")))
+  mtext(bquote(paste(mu, "=", pi, ", ", sigma^2, "=", 0.75 )),side=3,line=0) #\n mu=pi, rho=0.9")
+curve.circular(dcircularuniform, join=TRUE,ylim=c(-1.1,1.1), main=expression(paste("Density of a Circular Uniform Distribution")))
+```
+
+```{r}
+# Load necessary package
+library(circular)
+
+# Define a sequence of angles from -pi to pi
+theta <- seq(-pi, pi, length.out = 100)
+
+# Define concentration parameters
+kappa_values <- c(4, 2, 1)
+
+# Colors for the lines
+colors <- c("red", "blue", "green")
+
+# Plot the density functions
+plot(theta, dvonmises(theta, mu = 0, kappa = kappa_values[1]), type = "l", col = colors[1], 
+     lwd = 2, ylim = c(0, 1), xlab = "Angle (radians)", ylab = "Density",
+     main = "von Mises Density Functions")
+
+# Add other densities
+for (i in 2:length(kappa_values)) {
+  lines(theta, dvonmises(theta, mu = 0, kappa = kappa_values[i]), col = colors[i], lwd = 2)
+}
+
+# Add legend
+legend("topright", legend = kappa_values, title = expression(kappa), col = colors, lwd = 2)
+
+```
