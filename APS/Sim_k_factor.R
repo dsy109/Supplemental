@@ -1,10 +1,12 @@
-# This code creates functions for simultaneouse Tolerance intervals
+###############################################################
+###############################################################
+# Code for k-factors for simultaneous tolerance intervals
+###############################################################
+###############################################################
 
-###############################################################
-###############################################################
 # Product set 
 
-# P.target is a target contnet proportion.
+# P.target is a target content proportion.
 # alpha is our 1 - confidence level (gamma). 
 # X is our design matrix.
 # x0 is a vector of x points we would like to draw observation from.
