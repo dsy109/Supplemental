@@ -1,9 +1,9 @@
 ###############################################################
 ###############################################################
-### Code for "Appendix C: Sample Size Determination Discussion"
-### in "A Review of Statistical Reference Regions in Laboratory 
-### Medicine: Theory and Computation" by Thomas Mathew and
-### Derek S. Young
+### Code for "Sample Size Determination Discussion" in the 
+### Supplementary Material for "A Review of Statistical 
+### Reference Regions in Laboratory Medicine: Theory and 
+### Computation" by Thomas Mathew and Derek S. Young
 ###############################################################
 ###############################################################
 
