@@ -14,6 +14,6 @@ induced version on the GitHub repo.
 (4) IGF_Analysis.R: All R code used to analyze the IGF data.  This code is written to call the noise-induced
 version on the GitHub repo.
 
-(5) AppB.R: All R code to run the coverage study in Appendix B of the main manuscript.
+(5) AppB.R: All R code to run the coverage study in the Supplementary Material.
 
-(5) AppC.R: All R code to run the sample size determination illustration in Appendix C of the main manuscript.
+(6) AppC.R: All R code to run the sample size determination illustration in the Supplementary Material.
