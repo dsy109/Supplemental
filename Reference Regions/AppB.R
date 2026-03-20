@@ -1,10 +1,10 @@
 ###############################################################
 ###############################################################
-### Code for "Appendix B: Coverage Study for Rectangular 
-### Central Tolerance Regions Using the Parametric Bootstrap in
-### Algorithm 5" in "A Review of Statistical Reference Regions 
-### in Laboratory Medicine: Theory and Computation" by Thomas 
-### Mathew and Derek S. Young
+### Code for "Coverage Study for Rectangular Central Tolerance
+### Regions Using the Parametric Bootstrap in Algorithm 1" in
+### the Supplementary Material for "A Review of Statistical 
+### Reference Regions in Laboratory Medicine: Theory and 
+### Computation" by Thomas Mathew and Derek S. Young
 ###############################################################
 ###############################################################
 
